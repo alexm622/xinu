@@ -1,78 +1,66 @@
-/**
- * @file     xsh_kill.c
- *
- */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+/* xsh_kill.c - xsh_kill */
 
-#include <stddef.h>
-#include <thread.h>
-#include <stdio.h>
+#include <xinu.h>
 #include <string.h>
-#include <stdlib.h>
+#include <stdio.h>
 
-/**
- * @ingroup shell
- *
- * Shell command (kill) terminates a thread.
- * @param nargs number of arguments in args array
- * @param args  array of arguments
- * @return non-zero value on error
+/*------------------------------------------------------------------------
+ * xsh_kill - obtain and print the current month, day, year, and time
+ *------------------------------------------------------------------------
  */
-shellcmd xsh_kill(int nargs, char *args[])
-{
-    tid_typ tid;                /* tid for thread to kill */
+shellcmd xsh_kill(int nargs, char *args[]) {
 
-    /* Output help, if '--help' argument was supplied */
-    if (nargs == 2 && strcmp(args[1], "--help") == 0)
-    {
-        printf("Usage: %s <PID>\n\n", args[0]);
-        printf("Description:\n");
-        printf("\tKills a thread number PID.\n");
-        printf("Options:\n");
-        printf("\t<PID>\tID of thread to kill\n");
-        printf("\t--help\tdisplay this help and exit\n");
-        return 0;
-    }
+	int32	retval;			/* return value			*/
+	pid32	pid;			/* ID of process to kill	*/
+	char	ch;			/* next character of argument	*/
+	char	*chptr;			/* walks along argument string	*/
 
-    /* Check for correct number of arguments */
-    if (nargs < 2)
-    {
-        fprintf(stderr, "%s: missing operand\n", args[0]);
-        fprintf(stderr, "Try '%s --help' for more information\n",
-                args[0]);
-        return 1;
-    }
-    if (nargs > 2)
-    {
-        fprintf(stderr, "%s: too many arguments\n", args[0]);
-        fprintf(stderr, "Try '%s --help' for more information\n",
-                args[0]);
-        return 1;
-    }
+	/* Output info for '--help' argument */
 
-    tid = atoi(args[1]);
+	if (nargs == 2 && strncmp(args[1], "--help", 7) == 0) {
+		printf("Usage: %s PID\n\n", args[0]);
+		printf("Description:\n");
+		printf("\tterminates a process\n");
+		printf("Options:\n");
+		printf("\tPID \tthe ID of a process to terminate\n");
+		printf("\t--help\tdisplay this help and exit\n");
+		return OK;
+	}
 
-    /* Block killing of the null thread */
-    if (tid == NULLTHREAD)
-    {
-        fprintf(stderr, "%s: (%d) Operation not permitted\n", args[0],
-                tid);
-        return 1;
-    }
+	/* Check argument count */
 
-    /* Notify of killing of the shell */
-    if (tid == gettid())
-    {
-        fprintf(stderr, "%s: Shell killed\n", args[0]);
-        sleep(2000);
-    }
+	if (nargs != 2) {
+		fprintf(stderr, "%s: incorrect argument\n", args[0]);
+		fprintf(stderr, "Try '%s --help' for more information\n",
+			args[0]);
+		return SYSERR;
+	}
 
-    /* Kill thread, noting if kill failed */
-    if (kill(tid) == SYSERR)
-    {
-        fprintf(stderr, "%s: (%d) No such thread\n", args[0], tid);
-        return -1;
-    }
+	/* compute process ID from argument string */
 
-    return 0;
+	chptr = args[1];
+	ch = *chptr++;
+	pid = 0;
+	while(ch != NULLCH) {
+		if ( (ch < '0') || (ch > '9') ) {
+			fprintf(stderr, "%s: non-digit in process ID\n",
+				args[0]);
+			return 1;
+		}
+		pid = 10*pid + (ch - '0');
+		ch = *chptr++;
+	}
+	if (pid == 0) {
+		fprintf(stderr, "%s: cannot kill the null process\n",
+			args[0]);
+		return 1;
+	}
+
+	retval = kill(pid);
+	if (retval == SYSERR) {
+		fprintf(stderr, "%s: cannot kill process %d\n",
+			args[0], pid);
+		return 1;
+	}
+	return 0;
 }

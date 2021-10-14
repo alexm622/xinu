@@ -1,49 +1,42 @@
-/**
- * @file insertd.c
- *
- */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+/* insertd.c - insertd */
 
-#include <stddef.h>
-#include <thread.h>
-#include <queue.h>
+#include <xinu.h>
 
-/**
- * @ingroup threads
- *
- * Insert a thread in delta queue in ascending order
- * @param tid    thread id to insert
- * @param q      queue in which thread should be inserted
- * @param key    delta key
- * @return OK
+/*------------------------------------------------------------------------
+ *  insertd  -  Insert a process in delta list using delay as the key
+ *------------------------------------------------------------------------
  */
-int insertd(tid_typ tid, qid_typ q, int key)
+status	insertd(			/* Assumes interrupts disabled	*/
+	  pid32		pid,		/* ID of process to insert	*/
+	  qid16		q,		/* ID of queue to use		*/
+	  int32		key		/* Delay from "now" (in ms.)	*/
+	)
 {
-    int next;                   /* runs through list                  */
-    int prev;                   /* follows next through list          */
+	int32	next;			/* Runs through the delta list	*/
+	int32	prev;			/* Follows next through the list*/
 
-    if (isbadqid(q) || isbadtid(tid))
-    {
-        return SYSERR;
-    }
+	if (isbadqid(q) || isbadpid(pid)) {
+		return SYSERR;
+	}
 
-    prev = quehead(q);
-    next = quetab[quehead(q)].next;
-    while ((quetab[next].key <= key) && (next != quetail(q)))
-    {
-        key -= quetab[next].key;
-        prev = next;
-        next = quetab[next].next;
-    }
-    quetab[tid].next = next;
-    quetab[tid].prev = prev;
-    quetab[tid].key = key;
-    quetab[prev].next = tid;
-    quetab[next].prev = tid;
-    if (next != quetail(q))
-    {
-        quetab[next].key -= key;
-    }
+	prev = queuehead(q);
+	next = queuetab[queuehead(q)].qnext;
+	while ((next != queuetail(q)) && (queuetab[next].qkey <= key)) {
+		key -= queuetab[next].qkey;
+		prev = next;
+		next = queuetab[next].qnext;
+	}
 
-    return OK;
+	/* Insert new node between prev and next nodes */
+
+	queuetab[pid].qnext = next;
+	queuetab[pid].qprev = prev;
+	queuetab[pid].qkey = key;
+	queuetab[prev].qnext = pid;
+	queuetab[next].qprev = pid;
+	if (next != queuetail(q)) {
+		queuetab[next].qkey -= key;
+	}
+
+	return OK;
 }

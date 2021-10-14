@@ -1,57 +1,38 @@
-/**
- * @file memory.h
- * Definitions for kernel memory allocator and maintenance.
- *
+/* memory.h - roundmb, truncmb, freestk */
+
+#define	PAGE_SIZE	4096
+
+/*----------------------------------------------------------------------
+ * roundmb, truncmb - Round or truncate address to memory block size
+ *----------------------------------------------------------------------
  */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+#define	roundmb(x)	(char *)( (7 + (uint32)(x)) & (~7) )
+#define	truncmb(x)	(char *)( ((uint32)(x)) & (~7) )
 
-#ifndef _MEMORY_H_
-#define _MEMORY_H_
-
-#include <stddef.h>
-
-/* roundmb - round address up to size of memblock  */
-#define roundmb(x)  (void *)( (7 + (ulong)(x)) & ~0x07 )
-/* truncmb - truncate address down to size of memblock */
-#define truncmb(x)  (void *)( ((ulong)(x)) & ~0x07 )
-
-/**
- * @ingroup memory_mgmt
- *
- * Frees memory allocated with stkget().
- *
- * @param p
- *      Pointer to the topmost (highest address) word of the allocated stack (as
- *      returned by stkget()).
- * @param len
- *      Size of the allocated stack, in bytes.  (Same value passed to stkget().)
+/*----------------------------------------------------------------------
+ *  freestk  --  Free stack memory allocated by getstk
+ *----------------------------------------------------------------------
  */
-#define stkfree(p, len) memfree((void *)((ulong)(p)         \
-                                - (ulong)roundmb(len)       \
-                                + (ulong)sizeof(ulong)),    \
-                                (ulong)roundmb(len))
+#define	freestk(p,len)	freemem((char *)((uint32)(p)		\
+				- ((uint32)roundmb(len))	\
+				+ (uint32)sizeof(uint32)),	\
+				(uint32)roundmb(len) )
+
+struct	memblk	{			/* See roundmb & truncmb	*/
+	struct	memblk	*mnext;		/* Ptr to next free memory blk	*/
+	uint32	mlength;		/* Size of blk (includes memblk)*/
+	};
+extern	struct	memblk	memlist;	/* Head of free memory list	*/
+extern	void	*minheap;		/* Start of heap		*/
+extern	void	*maxheap;		/* Highest valid heap address	*/
 
 
-/**
- * Structure for a block of memory.
- */
-struct memblock
-{
-    struct memblock *next;          /**< pointer to next memory block       */
-    uint length;                    /**< size of memory block (with struct) */
-};
+/* Added by linker */
 
-extern struct memblock memlist;     /**< head of free memory list           */
-
-/* Other memory data */
-
-extern void *_end;              /**< linker provides end of image           */
-extern void *_etext;            /**< linker provides end of text segment    */
-extern void *memheap;           /**< bottom of heap                         */
-
-/* Memory function prototypes */
-void *memget(uint);
-syscall memfree(void *, uint);
-void *stkget(uint);
-
-#endif                          /* _MEMORY_H_ */
+extern	int	text;			/* Start of text segment	*/
+extern	int	etext;			/* End of text segment		*/
+extern	int	data;			/* Start of data segment	*/
+extern	int	edata;			/* End of data segment		*/
+extern	int	bss;			/* Start of bss segment		*/
+extern	int	ebss;			/* End of bss segment		*/
+extern	int	end;			/* End of program		*/

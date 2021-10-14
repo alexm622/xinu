@@ -1,45 +1,28 @@
-/**
- * @file open.c
- *
- */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+/* open.c - open */
 
-#include <stddef.h>
-#include <device.h>
-#include <stdarg.h>
+#include <xinu.h>
 
-/**
- * @ingroup devcalls
- *
- * Open a device so that read(), write(), putc(), and/or getc() operations can
- * be performed on it.
- *
- * @param descrp
- *      Index of the device to open.
- * @param ...
- *      Zero or more additional parameters that will be passed to the
- *      device-specific open function.
- *
- * @return
- *      On success, returns ::OK.  If the device index is bad or if another
- *      error occurs, returns ::SYSERR.  Generally, device drivers will at least
- *      return ::SYSERR in the case that the device is already open, but
- *      ::SYSERR may also be returned because of failure to allocate resources
- *      or for device-specific errors.
+/*------------------------------------------------------------------------
+ *  open  -  Open a device (some devices ignore name and mode parameters)
+ *------------------------------------------------------------------------
  */
-devcall open(int descrp, ...)
+syscall	open(
+	  did32		descrp,		/* Descriptor for device	*/
+	  char		*name,		/* Name to use, if any		*/
+	  char		*mode		/* Mode for device, if any	*/
+	)
 {
-    device *devptr;
-    va_list ap;
-    devcall result;
+	intmask		mask;		/* Saved interrupt mask		*/
+	struct dentry	*devptr;	/* Entry in device switch table	*/
+	int32		retval;		/* Value to return to caller	*/
 
-    if (isbaddev(descrp))
-    {
-        return SYSERR;
-    }
-    devptr = (device *)&devtab[descrp];
-    va_start(ap, descrp);
-    result = ((*devptr->open) (devptr, ap));
-    va_end(ap);
-    return result;
+	mask = disable();
+	if (isbaddev(descrp)) {
+		restore(mask);
+		return SYSERR;
+	}
+	devptr = (struct dentry *) &devtab[descrp];
+	retval = (*devptr->dvopen) (devptr, name, mode);
+	restore(mask);
+	return retval;
 }

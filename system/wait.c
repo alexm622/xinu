@@ -1,49 +1,39 @@
-/**
- * @file wait.c
- *
- */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+/* wait.c - wait */
 
-#include <thread.h>
+#include <xinu.h>
 
-/**
- * @ingroup semaphores
- *
- * Wait on a semaphore.
- *
- * If the semaphore's count is positive, it will be decremented and this
- * function will return immediately.  Otherwise, the currently running thread
- * will be put to sleep until the semaphore is signaled with signal() or
- * signaln(), or freed with semfree().
- *
- * @param sem
- *      Semaphore to wait on.
- *
- * @return
- *      ::OK on success; ::SYSERR on failure.  This function can only fail if @p
- *      sem did not specify a valid semaphore.
+/*------------------------------------------------------------------------
+ *  wait  -  Cause current process to wait on a semaphore
+ *------------------------------------------------------------------------
  */
-syscall wait(semaphore sem)
+syscall	wait(
+	  sid32		sem		/* Semaphore on which to wait  */
+	)
 {
-    register struct sement *semptr;
-    register struct thrent *thrptr;
-    irqmask im;
+	intmask mask;			/* Saved interrupt mask		*/
+	struct	procent *prptr;		/* Ptr to process's table entry	*/
+	struct	sentry *semptr;		/* Ptr to sempahore table entry	*/
 
-    im = disable();
-    if (isbadsem(sem))
-    {
-        restore(im);
-        return SYSERR;
-    }
-    thrptr = &thrtab[thrcurrent];
-    semptr = &semtab[sem];
-    if (--(semptr->count) < 0)
-    {
-        thrptr->state = THRWAIT;
-        thrptr->sem = sem;
-        enqueue(thrcurrent, semptr->queue);
-        resched();
-    }
-    restore(im);
-    return OK;
+	mask = disable();
+	if (isbadsem(sem)) {
+		restore(mask);
+		return SYSERR;
+	}
+
+	semptr = &semtab[sem];
+	if (semptr->sstate == S_FREE) {
+		restore(mask);
+		return SYSERR;
+	}
+
+	if (--(semptr->scount) < 0) {		/* If caller must block	*/
+		prptr = &proctab[currpid];
+		prptr->prstate = PR_WAIT;	/* Set state to waiting	*/
+		prptr->prsem = sem;		/* Record semaphore ID	*/
+		enqueue(currpid,semptr->squeue);/* Enqueue on semaphore	*/
+		resched();			/*   and reschedule	*/
+	}
+
+	restore(mask);
+	return OK;
 }

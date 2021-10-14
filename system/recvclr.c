@@ -1,34 +1,25 @@
-/**
- * @file recvclr.c
- *
- */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+/* recvclr.c - recvclr */
 
-#include <thread.h>
+#include <xinu.h>
 
-/**
- * @ingroup threads
- *
- * Clear messages, return waiting message (if any)
- * @return msg if available, NOMSG if no message
+/*------------------------------------------------------------------------
+ *  recvclr  -  Clear incoming message, and return message if one waiting
+ *------------------------------------------------------------------------
  */
-message recvclr(void)
+umsg32	recvclr(void)
 {
-    register struct thrent *thrptr;
-    irqmask im;
-    message msg;
+	intmask	mask;			/* Saved interrupt mask		*/
+	struct	procent *prptr;		/* Ptr to process's table entry	*/
+	umsg32	msg;			/* Message to return		*/
 
-    im = disable();
-    thrptr = &thrtab[thrcurrent];
-    if (thrptr->hasmsg)
-    {
-        msg = thrptr->msg;
-    }                           /* retrieve message       */
-    else
-    {
-        msg = NOMSG;
-    }
-    thrptr->hasmsg = FALSE;     /* reset message flag   */
-    restore(im);
-    return msg;
+	mask = disable();
+	prptr = &proctab[currpid];
+	if (prptr->prhasmsg == TRUE) {
+		msg = prptr->prmsg;	/* Retrieve message		*/
+		prptr->prhasmsg = FALSE;/* Reset message flag		*/
+	} else {
+		msg = OK;
+	}
+	restore(mask);
+	return msg;
 }

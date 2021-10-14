@@ -1,16 +1,13 @@
 /**
  * @file ethloop.h
  *
+ * $Id: ethloop.h 2076 2009-09-24 23:05:39Z brylow $
  */
 /* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
 
 #ifndef _ETHLOOP_H_
 #define _ETHLOOP_H_
 
-#include <stddef.h>
-#include <device.h>
-#include <ethernet.h>
-#include <semaphore.h>
 
 #define ELOOP_MTU          1500
 #define ELOOP_LINKHDRSIZE  ETH_HDR_LEN
@@ -35,34 +32,34 @@
 struct ethloop
 {
     int state;                      /**< device state                       */
-    device *dev;                    /**< device table entry                 */
+    struct dentry *dev;                    /**< device table entry                 */
     int poolid;                     /**< poolid for the buffer pool         */
-    uchar flags;                    /**< flags                              */
+    byte flags;                    /**< flags                              */
 
     /* Packet queue */
     int index;                  /**< index of first packet in buffer    */
-    semaphore sem;              /**< number of packets in buffer        */
+    sid32	sem;              /**< number of packets in buffer        */
     int count;                      /**< number of packets in buffer        */
     char *buffer[ELOOP_NBUF];   /**< input buffer                       */
     int pktlen[ELOOP_NBUF];         /**< length of packet in buffer         */
 
     /* Hold packet */
-    semaphore hsem;                 /**< number of held packets             */
+    sid32	hsem;                 /**< number of held packets             */
     char *hold;                 /**< hold buffer                        */
     int holdlen;                    /**< length of packet in hold buffer    */
 
     /* Statistics */
-    uint nout;                      /**< number of packets written          */
+    uint32 nout;                      /**< number of packets written          */
 };
 
 extern struct ethloop elooptab[];
 
 /* Driver functions */
-devcall ethloopInit(device *);
-devcall ethloopOpen(device *);
-devcall ethloopClose(device *);
-devcall ethloopRead(device *, void *, uint);
-devcall ethloopWrite(device *, const void *, uint);
-devcall ethloopControl(device *, int, long, long);
+devcall ethloopInit(struct dentry *);
+devcall ethloopOpen(struct dentry *);
+devcall ethloopClose(struct dentry *);
+devcall ethloopRead(struct dentry *, void *, uint32);
+devcall ethloopWrite(struct dentry *, void *, uint32);
+devcall ethloopControl(struct dentry *, int, int32, int32);
 
 #endif                          /* _ETHLOOP_H_ */

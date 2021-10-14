@@ -1,42 +1,22 @@
-/**
- * @file semaphore.h
- *
- */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+/* semaphore.h - isbadsem */
 
-#ifndef _SEMAPHORE_H_
-#define _SEMAPHORE_H_
-
-#include <queue.h>
+#ifndef	NSEM
+#define	NSEM		120	/* Number of semaphores, if not defined	*/
+#endif
 
 /* Semaphore state definitions */
-#define SFREE 0x01 /**< this semaphore is free */
-#define SUSED 0x02 /**< this semaphore is used */
 
-/* type definition of "semaphore" */
-typedef unsigned int semaphore;
+#define	S_FREE	0		/* Semaphore table entry is available	*/
+#define	S_USED	1		/* Semaphore table entry is in use	*/
 
-/**
- * Semaphore table entry
- */
-struct sement                   /* semaphore table entry      */
-{
-    char state;                 /**< the state SFREE or SUSED */
-    int count;                  /**< count for this semaphore */
-    qid_typ queue;              /**< requires queue.h.        */
+/* Semaphore table entry */
+struct	sentry	{
+	byte	sstate;		/* Whether entry is S_FREE or S_USED	*/
+	int32	scount;		/* Count for the semaphore		*/
+	qid16	squeue;		/* Queue of processes that are waiting	*/
+				/*     on the semaphore			*/
 };
 
-extern struct sement semtab[];
+extern	struct	sentry semtab[];
 
-/* isbadsem - check validity of reqested semaphore id and state */
-#define isbadsem(s) ((s >= NSEM) || (SFREE == semtab[s].state))
-
-/* Semaphore function prototypes */
-syscall wait(semaphore);
-syscall signal(semaphore);
-syscall signaln(semaphore, int);
-semaphore semcreate(int);
-syscall semfree(semaphore);
-syscall semcount(semaphore);
-
-#endif                          /* _SEMAPHORE_H */
+#define	isbadsem(s)	((int32)(s) < 0 || (s) >= NSEM)

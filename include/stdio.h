@@ -1,66 +1,34 @@
-/**
- * @file stdio.h
- */
-/* Embedded Xinu, Copyright (C) 2009, 2013.  All rights reserved. */
+/* stdio.h - definintions and constants for standard I/O functions */
 
-#ifndef _STDIO_H_
-#define _STDIO_H_
 
-#include <compiler.h>
-#include <stdarg.h>
-#include <thread.h>  /* For thrtab and thrcurrent. */
+/* Prototypes for formatted input functions */
 
-/*
- * Standard in/out/err
- * Note: The C99 specification states that they are macro expansions to a
- * pointer to FILE.  I say, close enough for Xinu.
- * C99 doc: http://www.open-std.org/JTC1/SC22/WG14/www/docs/n1256.pdf
- */
+extern	int32	_doscan(char *,int32 *, int32 (*)(void),
+			int32 (*)(char), int32, int32);
+extern	int32	sscanf(char *, char *, int32);
+extern	int32	fscanf(int32, char *, int32);
+#define	scanf(fmt, args)	fscanf(CONSOLE, fmt, args)
 
-/** @ingroup libxc
- * Standard input  */
-#define stdin ((thrtab[thrcurrent]).fdesc[0])
 
-/** @ingroup libxc
- * Standard output  */
-#define stdout ((thrtab[thrcurrent]).fdesc[1])
+/* Definintion of standard input/ouput/error used with shell commands */
 
-/** @ingroup libxc
- * Standard error  */
-#define stderr ((thrtab[thrcurrent]).fdesc[2])
+#define	stdin	((proctab[currpid]).prdesc[0])
+#define	stdout	((proctab[currpid]).prdesc[1])
+#define	stderr	((proctab[currpid]).prdesc[2])
 
-/* Formatted input  */
-int _doscan(const char *fmt, va_list ap,
-            int (*getch) (int, int), int (*ungetch) (int, int),
-            int arg1, int arg2);
 
-int fscanf(int dev, const char *format, ...);
+/* Prototypes for formatted output functions */
 
-/**
- * @ingroup libxc
- */
-#define scanf(fmt, ...)      fscanf(stdin, fmt, __VA_ARGS__)
+extern	int32	fprintf(int, char *, ...);
+extern	int32	printf(const char *, ...);
+extern	int32	sprintf(char *, char *, ...);
 
-int sscanf(const char *str, const char *format, ...);
 
-/* Formatted output  */
-int _doprnt(const char *format, va_list,
-	    int (*putc_func)(int, int), int putc_arg);
+/* Prototypes for character input and output functions */
 
-int fprintf(int dev, const char *format, ...) __printf_format(2, 3);
-int printf(const char *format, ...) __printf_format(1, 2);
-int sprintf(char *str, const char *format, ...) __printf_format(2, 3);
-
-/* Character and string input and output  */
-int fgetc(int dev);
-char *fgets(char *s, int n, int dev);
-int fputc(int c, int dev);
-int fputs(const char *s, int dev);
-
-/** @ingroup libxc */
-#define putchar(c) fputc((c), stdout)
-
-/** @ingroup libxc */
-#define getchar() fgetc(stdin)
-
-#endif  /* _STDIO_H_ */
+extern	int32	fgetc(int);
+extern	char	*fgets(char *, int32, int32);
+extern	int32	fputc(int32, int32);
+extern	int32	fputs(char *, int32);
+extern	int32	putchar(int32 c);
+extern	int32	getchar(void);

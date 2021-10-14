@@ -1,29 +1,26 @@
-/**
- * @file semcount.c
- *
- */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+/* semcount.c - semcount */
 
-#include <semaphore.h>
+#include <xinu.h>
 
-/**
- * @ingroup semaphores
- *
- * Retrieve a semaphore's count.
- *
- * @param sem
- *      Semaphore to get the count of.
- *
- * @return
- *      On success, returns the semaphore's count; otherwise returns ::SYSERR.
- *      This function can only fail if @p sem did not specify a valid semaphore.
+/*------------------------------------------------------------------------
+ *  semcount  -  Return the count of a semaphore (because any integer is
+ *		   possible, return of SYSERR may be ambiguous)
+ *------------------------------------------------------------------------
  */
-syscall semcount(semaphore sem)
+syscall semcount(
+	  sid32		semid		/* ID of semaphore to use	*/
+	)
 {
-    if (isbadsem(sem))
-    {
-        return SYSERR;
-    }
+	intmask	mask;			/* Saved interrupt mask		*/
+	int32	count;			/* Current sempahore count	*/
 
-    return (semtab[sem].count);
+	mask = disable();
+	
+	if (isbadsem(semid) || semtab[semid].sstate == S_FREE) {
+		restore(mask);
+		return SYSERR;
+	}
+	count = semtab[semid].scount;
+	restore(mask);
+	return count;
 }

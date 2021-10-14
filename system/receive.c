@@ -1,32 +1,25 @@
-/**
- * @file receive.c
- *
- */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+/* receive.c - receive */
 
-#include <thread.h>
+#include <xinu.h>
 
-/**
- * @ingroup threads
- *
- * receive - wait for a message and return it
- * @return message
+/*------------------------------------------------------------------------
+ *  receive  -  Wait for a message and return the message to the caller
+ *------------------------------------------------------------------------
  */
-message receive(void)
+umsg32	receive(void)
 {
-    register struct thrent *thrptr;
-    irqmask im;
-    message msg;
+	intmask	mask;			/* Saved interrupt mask		*/
+	struct	procent *prptr;		/* Ptr to process's table entry	*/
+	umsg32	msg;			/* Message to return		*/
 
-    im = disable();
-    thrptr = &thrtab[thrcurrent];
-    if (FALSE == thrptr->hasmsg)
-    {                           /* if no message, wait for one */
-        thrptr->state = THRRECV;
-        resched();
-    }
-    msg = thrptr->msg;          /* retrieve message                */
-    thrptr->hasmsg = FALSE;     /* reset message flag              */
-    restore(im);
-    return msg;
+	mask = disable();
+	prptr = &proctab[currpid];
+	if (prptr->prhasmsg == FALSE) {
+		prptr->prstate = PR_RECV;
+		resched();		/* Block until message arrives	*/
+	}
+	msg = prptr->prmsg;		/* Retrieve message		*/
+	prptr->prhasmsg = FALSE;	/* Reset message flag		*/
+	restore(mask);
+	return msg;
 }

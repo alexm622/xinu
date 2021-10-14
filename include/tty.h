@@ -1,68 +1,84 @@
-/**
- * @file tty.h
- *
- */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+/* tty.h */
 
-#ifndef _TTY_H_
-#define _TTY_H_
+#define	TY_OBMINSP	20		/* Min space in buffer before	*/
+					/*   processes awakened to write*/
+#define	TY_EBUFLEN	20		/* Size of echo queue		*/
 
-#include <device.h>
-#include <stdarg.h>
-#include <stddef.h>
+/* Size constants */
 
-#ifndef TTY_IBLEN
-#define TTY_IBLEN           1024 /**< input buffer length               */
+#ifndef	Ntty
+#define	Ntty		1		/* Number of serial tty lines	*/
+#endif
+#ifndef	TY_IBUFLEN
+#define	TY_IBUFLEN	128		/* Num. chars in input queue	*/
+#endif
+#ifndef	TY_OBUFLEN
+#define	TY_OBUFLEN	64		/* Num.	chars in output	queue	*/
 #endif
 
-/* TTY input flags */
-#define TTY_IRAW            0x01 /**< read unbuffered and uncooked      */
-#define TTY_INLCR           0x02 /**< convert '\n' to '\r'              */
-#define TTY_IGNCR           0x04 /**< ignore '\r' on input              */
-#define TTY_ICRNL           0x08 /**< convert '\r' to '\n'              */
-#define TTY_ECHO            0x10 /**< echo input                        */
-#define TTY_IALL (TTY_IRAW | TTY_INLCR | TTY_IGNCR | TTY_ICRNL | TTY_ECHO)
+/* Mode constants for input and output modes */
 
-/* TTY output flags */
-#define TTY_ONLCR           0x01 /**< convert '\n' to '\r\n'            */
-#define TTY_OCRNL           0x02 /**< convert '\r' to '\n'              */
+#define	TY_IMRAW	'R'		/* Raw input mode => no edits	*/
+#define	TY_IMCOOKED	'C'		/* Cooked mode => line editing	*/
+#define	TY_IMCBREAK	'K'		/* Honor echo, etc, no line edit*/
+#define	TY_OMRAW	'R'		/* Raw output mode => no edits	*/
 
-/* ttyControl() functions  */
-#define TTY_CTRL_SET_IFLAG  0x20 /**< set input flags                   */
-#define TTY_CTRL_CLR_IFLAG  0x21 /**< clear input flags                 */
-#define TTY_CTRL_SET_OFLAG  0x22 /**< set output flags                  */
-#define TTY_CTRL_CLR_OFLAG  0x23 /**< clear output flags                */
-
-/**
- * TTY control block
- */
-struct tty
-{
-    /* Pointers to associated structures */
-    device *phw;                /**< hardware device structure          */
-
-    /* TTY input fields */
-    uchar iflags;               /**< Input flags, TTY_I* above          */
-    bool ieof;                  /**< EOF read                           */
-    bool idelim;                /**< partial line in buffer             */
-    char in[TTY_IBLEN];         /**< input buffer                       */
-    uint istart;                /**< index of first char in buffer      */
-    uint icount;                /**< number of characters in buffer     */
-
-    /* TTY output fields */
-    uchar oflags;               /**< Output flags, TTY_O* above         */
+struct	ttycblk	{			/* Tty line control block	*/
+	char	*tyihead;		/* Next input char to read	*/
+	char	*tyitail;		/* Next slot for arriving char	*/
+	char	tyibuff[TY_IBUFLEN];	/* Input buffer (holds one line)*/
+	sid32	tyisem;			/* Input semaphore		*/
+	char	*tyohead;		/* Next output char to xmit	*/
+	char	*tyotail;		/* Next slot for outgoing char	*/
+	char	tyobuff[TY_OBUFLEN];	/* Output buffer		*/
+	sid32	tyosem;			/* Output semaphore		*/
+	char	*tyehead;		/* Next echo char to xmit	*/
+	char	*tyetail;		/* Next slot to deposit echo ch	*/
+	char	tyebuff[TY_EBUFLEN];	/* Echo buffer			*/
+	char	tyimode;		/* Input mode raw/cbreak/cooked	*/
+	bool8	tyiecho;		/* Is input echoed?		*/
+	bool8	tyieback;		/* Do erasing backspace on echo?*/
+	bool8	tyevis;			/* Echo control chars as ^X ?	*/
+	bool8	tyecrlf;		/* Echo CR-LF for newline?	*/
+	bool8	tyicrlf;		/* Map '\r' to '\n' on input?	*/
+	bool8	tyierase;		/* Honor erase character?	*/
+	char	tyierasec;		/* Primary erase character	*/
+	char	tyierasec2;		/* Alternate erase character	*/
+	bool8	tyeof;			/* Honor EOF character?		*/
+	char	tyeofch;		/* EOF character (usually ^D)	*/
+	bool8	tyikill;		/* Honor line kill character?	*/
+	char	tyikillc;		/* Line kill character		*/
+	int32	tyicursor;		/* Current cursor position	*/
+	bool8	tyoflow;		/* Honor ostop/ostart?		*/
+	bool8	tyoheld;		/* Output currently being held?	*/
+	char	tyostop;		/* Character that stops output	*/
+	char	tyostart;		/* Character that starts output	*/
+	bool8	tyocrlf;		/* Output CR/LF for LF ?	*/
+	char	tyifullc;		/* Char to send when input full	*/
 };
+extern	struct	ttycblk	ttytab[];
 
-extern struct tty ttytab[];
+/* Characters with meaning to the tty driver */
 
-/* Driver functions */
-devcall ttyInit(device *);
-devcall ttyOpen(device *, va_list);
-devcall ttyClose(device *);
-devcall ttyRead(device *, void *, uint);
-devcall ttyWrite(device *, void *, uint);
-devcall ttyGetc(device *);
-devcall ttyPutc(device *, char);
-devcall ttyControl(device *, int, long, long);
+#define	TY_BACKSP	'\b'		/* Backspace character		*/
+#define	TY_BACKSP2	'\177'		/* Alternate backspace char.	*/
+#define	TY_BELL		'\07'		/* Character for audible beep	*/
+#define	TY_EOFCH	'\04'		/* Control-D is EOF on input	*/
+#define	TY_BLANK	' '		/* Blank			*/
+#define	TY_NEWLINE	'\n'		/* Newline == line feed		*/
+#define	TY_RETURN	'\r'		/* Carriage return character	*/
+#define	TY_STOPCH	'\023'		/* Control-S stops output	*/
+#define	TY_STRTCH	'\021'		/* Control-Q restarts output	*/
+#define	TY_KILLCH	'\025'		/* Control-U is line kill	*/
+#define	TY_UPARROW	'^'		/* Used for control chars (^X)	*/
+#define	TY_FULLCH	TY_BELL		/* Char to echo when buffer full*/
 
-#endif                          /* _TTY_H_ */
+/* Tty control function codes */
+
+#define	TC_NEXTC	3		/* Look ahead 1 character	*/
+#define	TC_MODER	4		/* Set input mode to raw	*/
+#define	TC_MODEC	5		/* Set input mode to cooked	*/
+#define	TC_MODEK	6		/* Set input mode to cbreak	*/
+#define	TC_ICHARS	8		/* Return number of input chars	*/
+#define	TC_ECHO		9		/* Turn on echo			*/
+#define	TC_NOECHO	10		/* Turn off echo		*/

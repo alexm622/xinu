@@ -1,39 +1,26 @@
-/**
- * @file close.c
- *
- */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+/* close.c - close */
 
-#include <stddef.h>
-#include <device.h>
+#include <xinu.h>
 
-/**
- * @ingroup devcalls
- *
- * Close a device.
- *
- * @param descrp
- *      Index of the device to close.
- *
- * @return
- *      ::OK if device was successfully closed; ::SYSERR otherwise.
- *
- * Most device drivers will return ::SYSERR if the device is not open but
- * otherwise will always be able to successfully close the device and return
- * ::OK.
- *
- * Caveat:  You must not close the device while any threads are using it (e.g.
- * for read() or write()), unless the corresponding device driver documents this
- * as allowed.
+/*------------------------------------------------------------------------
+ *  close  -  Close a device
+ *------------------------------------------------------------------------
  */
-devcall close(int descrp)
+syscall	close(
+	  did32		descrp		/* Descriptor for device	*/
+	)
 {
-    device *devptr;
+	intmask		mask;		/* Saved interrupt mask		*/
+	struct	dentry	*devptr;	/* Entry in device switch table	*/
+	int32		retval;		/* Value to return to caller	*/
 
-    if (isbaddev(descrp))
-    {
-        return SYSERR;
-    }
-    devptr = (device *)&devtab[descrp];
-    return ((*devptr->close) (devptr));
+	mask = disable();
+	if (isbaddev(descrp)) {
+		restore(mask);
+		return SYSERR;
+	}
+	devptr = (struct dentry *) &devtab[descrp];
+	retval = (*devptr->dvclose) (devptr);
+	restore(mask);
+	return retval;
 }

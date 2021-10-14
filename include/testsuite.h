@@ -1,76 +1,38 @@
-/**
- * @file testsuite.h
- * Definitions relating to the Xinu testsuite.
- *
+/* testsuite.h - failif */
+
+process	test_addargs(bool8);
+process	test_bigargs(bool8);
+process	test_schedule(bool8 verbose);
+process	test_preempt(bool8 verbose);
+process	test_recursion(bool8 verbose);
+process	test_semaphore(bool8 verbose);
+process	test_semaphore2(bool8 verbose);
+process	test_semaphore3(bool8 verbose);
+process	test_semaphore4(bool8 verbose);
+process	test_semaphore5(bool8 verbose);
+process	test_libStdio(bool8 verbose);
+
+void	testPass(bool8, const char *);
+void	testFail(bool8, const char *);
+void	testSkip(bool8, const char *);
+void	testPrint(bool8, const char *);
+
+/*------------------------------------------------------------------------
+ * failif - report failure by displaying a message is condition is met
+ *------------------------------------------------------------------------
  */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
-
-#ifndef _TESTSUITE_H_
-#define _TESTSUITE_H_
-
-#include <thread.h>
-
-thread test_bigargs(bool);
-thread test_schedule(bool);
-thread test_preempt(bool);
-thread test_recursion(bool);
-thread test_semaphore(bool);
-thread test_semaphore2(bool);
-thread test_semaphore3(bool);
-thread test_semaphore4(bool);
-thread test_procQueue(bool);
-thread test_deltaQueue(bool);
-thread test_libStdio(bool);
-thread test_libCtype(bool);
-thread test_libString(bool);
-thread test_libStdlib(bool);
-thread test_libLimits(bool);
-thread test_ttydriver(bool);
-thread test_ether(bool);
-thread test_ethloop(bool);
-thread test_tee(bool);
-thread test_memory(bool);
-thread test_bufpool(bool);
-thread test_nvram(bool);
-thread test_libQueue(bool);
-thread test_system(bool);
-thread test_mailbox(bool);
-thread test_messagePass(bool);
-thread test_netaddr(bool);
-thread test_netif(bool);
-thread test_arp(bool);
-thread test_snoop(bool);
-thread test_udp(bool);
-thread test_raw(bool);
-thread test_ip(bool);
-thread test_umemory(bool);
-thread test_tlb(bool);
-
-void testPass(bool, const char *);
-void testFail(bool, const char *);
-void testSkip(bool, const char *);
-void testPrint(bool, const char *);
-
-/**
- * Causes the test to fail if condition is met and display failmsg in that
- * case.  Otherwise, the test will pass.
- * @param cond    condition for failure.
- * @param failmsg message to display if case fails.
- */
-#define failif(cond, failmsg) \
-	if ( cond ) { testFail(verbose, failmsg); printf("\t%s:%d\r\n", __FILE__, __LINE__); passed = FALSE; } \
+#define	failif(cond, failmsg) \
+	if ( cond ) { testFail(verbose, failmsg); passed = FALSE; } \
 	else { testPass(verbose, ""); }
 
-/**
- * Defines what a test case table entry looks like
- */
-struct testcase
-{
-    char *name;                 /**< Name of test case                  */
-    thread (*test) (bool);      /**< Test case function                 */
+/* Define the strcuture of an entry in the table of test cases */
+
+struct	testcase {
+    char	*name;		/* Name of test case			*/
+    process	(*test) (bool8);/* Test case function			*/
 };
 
-extern int ntests;                /**< total number of tests            */
-extern struct testcase testtab[]; /**< table of test cases              */
+extern	int	ntests;		/* total number of tests		*/
+extern	struct	testcase testtab[]; /* table of test cases		*/
 
-#endif                          /* _TESTSUITE_H_ */
+#define	TESTSTK	8192		/* size of process stack used for test	*/

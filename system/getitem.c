@@ -1,76 +1,58 @@
-/**
- * @file getitem.c
- *
- */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+/* getitem.c - getfirst, getlast, getitem */
 
-#include <stddef.h>
-#include <queue.h>
+#include <xinu.h>
 
-/**
- * @ingroup threads
- *
- * Remove a thread from front of queue
- * @param  q  target queue
- * @return thread ID of removed thread
+/*------------------------------------------------------------------------
+ *  getfirst  -  Remove a process from the front of a queue
+ *------------------------------------------------------------------------
  */
-tid_typ getfirst(qid_typ q)
+pid32	getfirst(
+	  qid16		q		/* ID of queue from which to	*/
+	)				/* Remove a process (assumed	*/
+					/*   valid with no check)	*/
 {
-    tid_typ head;
+	pid32	head;
 
-    if (isbadqid(q))
-    {
-        return SYSERR;
-    }
-    if (isempty(q))
-    {
-        return EMPTY;
-    }
+	if (isempty(q)) {
+		return EMPTY;
+	}
 
-    head = quehead(q);
-    return getitem(quetab[head].next);
+	head = queuehead(q);
+	return getitem(queuetab[head].qnext);
 }
 
-/**
- * @ingroup threads
- *
- * Remove a thread from end of queue
- * @param  q  target queue
- * @return thread ID of removed thread
+/*------------------------------------------------------------------------
+ *  getlast  -  Remove a process from end of queue
+ *------------------------------------------------------------------------
  */
-tid_typ getlast(qid_typ q)
+pid32	getlast(
+	  qid16		q		/* ID of queue from which to	*/
+	)				/* Remove a process (assumed	*/
+					/*   valid with no check)	*/
 {
-    tid_typ tail;
+	pid32 tail;
 
-    if (isbadqid(q))
-    {
-        return SYSERR;
-    }
-    if (isempty(q))
-    {
-        return EMPTY;
-    }
+	if (isempty(q)) {
+		return EMPTY;
+	}
 
-    tail = quetail(q);
-    return getitem(quetab[tail].prev);
+	tail = queuetail(q);
+	return getitem(queuetab[tail].qprev);
 }
 
-/**
- * @ingroup threads
- *
- * Remove a thread from anywhere in a queue
- * @param  tid  thread ID to get
- * @return thread ID of removed thread
+/*------------------------------------------------------------------------
+ *  getitem  -  Remove a process from an arbitrary point in a queue
+ *------------------------------------------------------------------------
  */
-tid_typ getitem(tid_typ tid)
+pid32	getitem(
+	  pid32		pid		/* ID of process to remove	*/
+	)
 {
-    tid_typ prev, next;
+	pid32	prev, next;
 
-    next = quetab[tid].next;
-    prev = quetab[tid].prev;
-    quetab[prev].next = next;
-    quetab[next].prev = prev;
-    quetab[tid].next = EMPTY;
-    quetab[tid].prev = EMPTY;
-    return tid;
+	next = queuetab[pid].qnext;	/* Following node in list	*/
+	prev = queuetab[pid].qprev;	/* Previous node in list	*/
+	queuetab[prev].qnext = next;
+	queuetab[next].qprev = prev;
+	return pid;
 }

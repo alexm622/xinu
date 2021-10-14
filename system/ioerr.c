@@ -1,19 +1,12 @@
-/**
- * @file ioerr.c
- *
- */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+/* ioerr.c - ioerr */
 
-#include <stddef.h>
+#include <xinu.h>
 
-/**
- * @ingroup devcalls
- *
- * Unconditionally return an error (used for "error" entries in devtab).
- *
- * @return ::SYSERR
+/*------------------------------------------------------------------------
+ *  ioerr  -  Return an error status (used for "error" entries in devtab)
+ *------------------------------------------------------------------------
  */
-devcall ioerr(void)
+devcall	ioerr(void)
 {
-    return SYSERR;
+	return SYSERR;
 }

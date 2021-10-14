@@ -1,19 +1,12 @@
-/**
- * @file ionull.c
- *
- */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+/* ionull.c - ionull */
 
-#include <stddef.h>
+#include <xinu.h>
 
-/**
- * @ingroup devcalls
- *
- * Do nothing (use for irrelevant entries in devtab).
- *
- * @return ::OK
+/*------------------------------------------------------------------------
+ *  ionull  -  Do nothing (used for "don't care" entries in devtab)
+ *------------------------------------------------------------------------
  */
-devcall ionull(void)
+devcall	ionull(void)
 {
-    return OK;
+	return OK;
 }

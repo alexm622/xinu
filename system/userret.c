@@ -1,17 +1,12 @@
-/**
- * @file userret.c
- *
- */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+/* userret.c - userret */
 
-#include <thread.h>
+#include <xinu.h>
 
-/**
- * @ingroup threads
- *
- * Entered when a thread exits by return.
+/*------------------------------------------------------------------------
+ *  userret  -  Called when a process returns from the top-level function
+ *------------------------------------------------------------------------
  */
-void userret(void)
+void	userret(void)
 {
-    kill(gettid());
+	kill(getpid());			/* Force process to exit */
 }

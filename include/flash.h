@@ -3,13 +3,10 @@
  * This file provides various definitions and prototypes for the flash
  * driver and all its affiliates
  *
+ * $Id: flash.h 2065 2009-09-04 21:44:36Z brylow $
  */
 /* Embedded XINU, Copyright (C) 2007.  All rights reserved. */
 
-#include <kernel.h>
-#include <device.h>
-#include <semaphore.h>
-#include <stdarg.h>
 
 #ifndef _FLASH_H_
 #define _FLASH_H_
@@ -45,54 +42,54 @@
 /* Structures */
 struct trx_header
 {
-    uint magic;                 /**< "HDR0"                              */
-    uint len;                   /**< Length of file including header     */
-    uint crc;                   /**< 32-bit CRC from flag_vers to EOF    */
-    uint flags_vers;             /**< 0-15 flags, 16-31 version           */
-    uint offsets[3];            /**< Partition offsets from header start */
+    uint32 magic;                 /**< "HDR0"                              */
+    uint32 len;                   /**< Length of file including header     */
+    uint32 crc;                   /**< 32-bit CRC from flag_vers to EOF    */
+    uint32 flags_vers;             /**< 0-15 flags, 16-31 version           */
+    uint32 offsets[3];            /**< Partition offsets from header start */
 };
 
 /* File structure */
 struct file
 {
-    uint len;
+    uint32 len;
     char *name;
     void *data;
 };
 
 struct flash_region
 {
-    ulong nblocks;              /**< number of blocks within region      */
-    ulong block_size;           /**< size of block in region             */
-    ulong region_start;         /**< beginning of region in memory       */
-    ulong region_size;          /**< size of region in bytes             */
+    uint32 nblocks;              /**< number of blocks within region      */
+    uint32 block_size;           /**< size of block in region             */
+    uint32 region_start;         /**< beginning of region in memory       */
+    uint32 region_size;          /**< size of region in bytes             */
 };
 
 struct flash_block
 {
-    ulong start_pos;            /**< physical position data starts at    */
-    ulong size;                 /**< size of this block                  */
-    uchar state;                /**< state of this block                 */
+    uint32 start_pos;            /**< physical position data starts at    */
+    uint32 size;                 /**< size of this block                  */
+    byte state;                /**< state of this block                 */
     void *buffer;               /**< buffer for this block               */
 };
 
 struct flash
 {
-    device *device;             /**< flash entry in dev structure        */
-    uchar commands;             /**< command set the interface uses      */
-    ulong base;                 /**< base address for flash memory       */
-    semaphore lock;             /**< lock for execution flash operations */
-    ulong size;                 /**< size (in bytes) of flash memory     */
-    uchar mode;                 /**< current mode of flash               */
-    ushort nregions;            /**< number of regions on device         */
+    struct dentry *device;             /**< flash entry in dev structure        */
+    byte commands;             /**< command set the interface uses      */
+    uint32 base;                 /**< base address for flash memory       */
+    sid32	lock;             /**< lock for execution flash operations */
+    uint32 size;                 /**< size (in bytes) of flash memory     */
+    byte mode;                 /**< current mode of flash               */
+    uint16 nregions;            /**< number of regions on device         */
     struct flash_region regions[MAX_REGIONS];     /**< region info.      */
 
-    ulong log_size;             /**< size of logical disk blocks         */
-    ulong nlog_blocks;          /**< number of logical blocks on disk    */
+    uint32 log_size;             /**< size of logical disk blocks         */
+    uint32 nlog_blocks;          /**< number of logical blocks on disk    */
 
     /** list of open blocks on flash device                              */
     struct flash_block erase_blocks[MAX_LIVE_BLOCKS];
-    uchar curr_block;           /**< offset of the oldest block stored   */
+    byte curr_block;           /**< offset of the oldest block stored   */
 };
 
 extern struct flash_block bad_block;
@@ -110,6 +107,7 @@ extern struct flash_block bad_block;
 /* commands for data gathering */
 #define CFI_QUERY_ADDR    0x55
 #define CFI_QUERY_MODE    0x98
+#define CFI_QUERY_EXIT    0xFF
 
 #define CFI_MANUFACTURER  0x00
 #define CFI_DEVICE        0x01
@@ -148,15 +146,15 @@ extern struct flash_block bad_block;
 
 /* put/get 16-bits commands for Intel */
 #define INTEL_PUT_16(addr,word) \
-	*((volatile unsigned short *)((unsigned int)(addr)))=(word)
+	*((volatile unsigned int16 *)((unsigned int)(addr)))=(word)
 #define INTEL_GET_16(addr) \
-	*((volatile unsigned short *)((unsigned int)(addr)))
+	*((volatile unsigned int16 *)((unsigned int)(addr)))
 
 /* put/get 16-bits commands for AMD */
 #define AMD_PUT_16(addr,word) \
-    *((volatile unsigned short *)((unsigned int)(addr)))=(word)
+    *((volatile unsigned int16 *)((unsigned int)(addr)))=(word)
 #define AMD_GET_16(addr) \
-        *((volatile unsigned short *)((unsigned int)(addr)))
+        *((volatile unsigned int16 *)((unsigned int)(addr)))
 
 
 /* Intel command codes                                               */
@@ -229,30 +227,30 @@ extern struct flash_block bad_block;
 extern struct flash flashtab[];
 
 /* Prototypes for flash function calls */
-devcall flashInit(device *);
-devcall flashOpen(device *, va_list);
-devcall flashRead(device *, uchar *, ulong);
-devcall flashWrite(device *, uchar *, ulong);
-devcall flashSeek(device *, ulong);
-devcall flashControl(device *, ushort, long, long);
-devcall flashClose(device *);
+devcall flashInit(struct dentry *);
+devcall flashOpen(struct dentry *, va_list);
+devcall flashRead(struct dentry *, byte *, uint32);
+devcall flashWrite(struct dentry *, byte *, uint32);
+devcall flashSeek(struct dentry *, uint32);
+devcall flashControl(struct dentry *, uint16, int32, int32);
+devcall flashClose(struct dentry *);
 
 /* Prototypes for the Logical Flash Interface */
-devcall logicalRead(struct flash *, uchar *, ulong);
-devcall logicalWrite(struct flash *, uchar *, ulong);
-struct flash_block logicalMap(struct flash *, ulong);
+devcall logicalRead(struct flash *, byte *, uint32);
+devcall logicalWrite(struct flash *, byte *, uint32);
+struct flash_block logicalMap(struct flash *, uint32);
 
 /* Prototypes for Physical Flash functions */
 devcall physicalRead(struct flash *, struct flash_block *);
 devcall physicalWrite(struct flash *, struct flash_block *);
 devcall physicalErase(struct flash *, struct flash_block *);
-devcall physicalControl(struct flash *, struct flash_block *, uchar,
-                        ulong);
+devcall physicalControl(struct flash *, struct flash_block *, byte,
+                        uint32);
 devcall physicalIntelRead(struct flash *, struct flash_block *);
 devcall physicalIntelWrite(struct flash *, struct flash_block *);
 devcall physicalIntelErase(struct flash *, struct flash_block *);
-devcall physicalIntelControl(struct flash *, struct flash_block *, uchar,
-                             ulong);
+devcall physicalIntelControl(struct flash *, struct flash_block *, byte,
+                             uint32);
 devcall physicalAMDRead(struct flash *, struct flash_block *);
 
 /* Prototypes for changing OS in flash memory */

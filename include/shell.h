@@ -1,130 +1,75 @@
-/**
- * @file shell.h
- *
- */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+/* shell.h - Declarations and constants used by the Xinu shell */
 
-#ifndef _SHELL_H_
-#define _SHELL_H_
+/* Size constants */
 
-#include <stddef.h>
-#include <conf.h>
-
-/* Size contstants */
-#define SHELL_BUFLEN  160       /**< length of general buffer           */
-#define SHELL_MAXTOK  32        /**< maximum tokens per line            */
-#define SHELL_CMDSTK  8192      /**< size of command proc. stack        */
-#define SHELL_CMDPRIO 20        /**< command process priority           */
+#define SHELL_BUFLEN	TY_IBUFLEN+1	/* Length of input buffer	*/
+#define SHELL_MAXTOK	32		/* Maximum tokens per line	*/
+#define SHELL_CMDSTK	8192		/* Size of stack for process	*/
+					/*    that executes command	*/
+#define	SHELL_ARGLEN	(SHELL_BUFLEN+SHELL_MAXTOK) /* Argument area	*/
+#define SHELL_CMDPRIO	20		/* Process priority for command	*/
 
 /* Message constants */
-#define SHELL_BANNER_DEFAULT "\n\033[1;31m--------------------------------------\n      ____  ___.__                    \n      \\   \\/  /|__| ____  __ __       \n       \\     / |  |/    \\|  |  \\      \n       /     \\ |  |   |  \\  |  /      \n      /___/\\  \\|__|___|  /____/       \n            \\_/        \\/       v2.0  \n--------------------------------------\n\033[0;39m\n"
 
-#define SHELL_BANNER_DEFAULT_NONVT100 "--------------------------------------\n      ____  ___.__                    \n      \\   \\/  /|__| ____  __ __       \n       \\     / |  |/    \\|  |  \\      \n       /     \\ |  |   |  \\  |  /      \n      /___/\\  \\|__|___|  /____/       \n            \\_/        \\/       v3.14 \n--------------------------------------\n\n"
+/* Shell banner (assumes VT100) */
 
-#define SHELL_BANNER_PI "\n\033[1;31m-----------------------------------------------------\n      ____  ___\033[1;32m.__\033[1;31m                 .___   \033[1;32m.__\033[1;31m\n      \\   \\/  /\033[1;32m|__|\033[1;31m ____  __ __    |  _ \\ \033[1;32m|__|\033[1;31m\n       \\     / |  |/    \\|  |  \\   | |_| ||  |\n       /     \\ |  |   |  \\  |  /   |  __/ |  |\n      /___/\\  \\|__|___|  /____/    | |    |__|\n            \\_/        \\/          |/          v3.14\n-----------------------------------------------------\n\033[0;39m\n"
+#define	SHELL_BAN0	"\033[31;1m"
+#define SHELL_BAN1      "------------------------------------------"
+#define SHELL_BAN2      "   __    __   _____    _   _    _    _    "
+#define SHELL_BAN3      "   \\ \\  / /  |__ __|  | \\ | |  | |  | |   "
+#define SHELL_BAN4      "    \\ \\/ /     | |    |  \\| |  | |  | |   "
+#define SHELL_BAN5      "    / /\\ \\    _| |_   | \\   |  | |  | |   "
+#define SHELL_BAN6      "   / /  \\ \\  |     |  | | \\ |  \\  --  /   "
+#define SHELL_BAN7      "   --    --   -----    -   -     ----     "
+#define SHELL_BAN8      "------------------------------------------"
+#define	SHELL_BAN9	"\033[0m\n"
 
-#define SHELL_BANNER_PI_NONVT100 "-----------------------------------------------------\n      ____  ___.__                 .___   .__\n      \\   \\/  /|__| ____  __ __    |  _ \\ |__|\n       \\     / |  |/    \\|  |  \\   | |_| ||  |\n       /     \\ |  |   |  \\  |  /   |  __/ |  |\n      /___/\\  \\|__|___|  /____/    | |    |__|\n            \\_/        \\/          |/          v3.14\n-----------------------------------------------------\n\n"
+/* Messages shell displays for user */
 
-#ifdef _XINU_PLATFORM_ARM_RPI_
-#  define SHELL_BANNER            SHELL_BANNER_PI
-#  define SHELL_BANNER_NONVT100   SHELL_BANNER_PI_NONVT100
-#else
-#  define SHELL_BANNER            SHELL_BANNER_DEFAULT
-#  define SHELL_BANNER_NONVT100   SHELL_BANNER_DEFAULT_NONVT100
-#endif
+#define SHELL_PROMPT	"xsh $ "	/* Command prompt		*/
+#define SHELL_STRTMSG	"Welcome to Xinu!\n"/* Welcome message		*/
+#define SHELL_EXITMSG	"Shell closed\n"/* Shell exit message		*/
+#define SHELL_SYNERRMSG	"Syntax error\n"/* Syntax error message		*/
+#define SHELL_CREATMSG	"Cannot create process\n"/* command error	*/
+#define SHELL_INERRMSG	"Cannot open file %s for input\n" /* Input err	*/
+#define SHELL_OUTERRMSG	"Cannot open file %s for output\n"/* Output err	*/
+					/* Builtin cmd error message	*/
+#define SHELL_BGERRMSG	"Cannot redirect I/O or background a builtin\n"
 
-/** start message */
-#define SHELL_START     "Welcome to the wonderful world of Xinu!\n"
-//#define SHELL_START     "\033[1;5;37;41mThis is NOT the kernel you are looking for!\033[0;39m\n"
-#define SHELL_EXIT       "Shell closed.\n"  /**< exit message            */
-#define SHELL_PROMPT     "xsh"              /**< prompt                  */
-#define MAX_PROMPT_LEN   32                 /**< basic prompt max length */
-#define SHELL_SYNTAXERR  "Syntax error.\n"  /**< syntax error            */
-#define SHELL_CHILDERR   "Cannot create.\n" /**< command error           */
+/* Constants used for lexical analysis */
+
+#define	SH_NEWLINE	'\n'		/* New line character		*/
+#define	SH_EOF		'\04'		/* Control-D is EOF		*/
+#define	SH_AMPER	'&'		/* Ampersand character		*/
+#define	SH_BLANK	' '		/* Blank character		*/
+#define	SH_TAB		'\t'		/* Tab character		*/
+#define	SH_SQUOTE	'\''		/* Single quote character	*/
+#define	SH_DQUOTE	'"'		/* Double quote character	*/
+#define	SH_LESS		'<'		/* Less-than character	*/
+#define	SH_GREATER	'>'		/* Greater-than character	*/
+
+/* Token types */
+
+#define	SH_TOK_AMPER	0		/* Ampersand token		*/
+#define	SH_TOK_LESS	1		/* Less-than token		*/
+#define	SH_TOK_GREATER	2		/* Greater-than token		*/
+#define	SH_TOK_OTHER	3		/* Token other than those	*/
+					/*   listed above (e.g., an	*/
+					/*   alphanumeric string)	*/
 
 /* Shell return constants */
-#define SHELL_OK    0
-#define SHELL_ERROR 1
 
-/**
- * Defines what an entry in the shell command table looks like.
- */
-struct centry
-{
-    char *name;                 /**< name of command                    */
-    bool builtin;               /**< built-in command?                  */
-    shellcmd (*procedure) (int, char *[]);/**< procedure                */
+#define	SHELL_OK	 0
+#define	SHELL_ERROR	 1
+#define	SHELL_EXIT	-3
+
+/* Structure of an entry in the table of shell commands */
+
+struct	cmdent	{			/* Entry in command table	*/
+	char	*cname;			/* Name of command		*/
+	bool8	cbuiltin;		/* Is this a builtin command?	*/
+	int32	(*cfunc)(int32,char*[]);/* Function for command		*/
 };
 
-/* Token parsing functions */
-#define isEndOfLine(c)    ((c) == '\0' || (c) == '\r' || (c) == '\n')
-#define isQuote(c)        ((c) == '"' || (c) == '\'')
-#define isOtherSpecial(c) ((c) == '<' || (c) == '>' || (c) == '&')
-#define isWhitespace(c)   ((c) == ' ' || (c) == '\t')
-
-/* helpers for parse command line arguments */
-struct getopt
-{
-    int argc;
-    char **argv;
-    char *optstring;
-    char *optarg;
-    int optind;
-    int optopt;
-    int opterr;
-    int optreset;
-};
-int getopt(int, char **, char *, struct getopt *);
-
-extern const struct centry commandtab[];
-                                     /**< table of commands             */
-extern ulong ncommand;               /**< number of commands in table   */
-
-/* Function prototypes */
-thread shell(int, int, int);
-short lexan(char *, ushort, char *, char *[]);
-shellcmd xsh_arp(int, char *[]);
-shellcmd xsh_clear(int, char *[]);
-shellcmd xsh_dumptlb(int, char *[]);
-shellcmd xsh_date(int, char *[]);
-shellcmd xsh_ethstat(int, char *[]);
-shellcmd xsh_exit(int, char *[]);
-shellcmd xsh_flashstat(int, char *[]);
-shellcmd xsh_gpiostat(int, char *[]);
-shellcmd xsh_help(int, char *[]);
-shellcmd xsh_kexec(int, char *[]);
-shellcmd xsh_kill(int, char *[]);
-shellcmd xsh_led(int, char *[]);
-shellcmd xsh_memdump(int, char *[]);
-shellcmd xsh_memstat(int, char *[]);
-shellcmd xsh_nc(int, char *[]);
-shellcmd xsh_netstat(int, char *[]);
-shellcmd xsh_netup(int, char *[]);
-shellcmd xsh_netemu(int, char *[]);
-shellcmd xsh_netdown(int, char *[]);
-shellcmd xsh_nvram(int, char *[]);
-shellcmd xsh_ping(int, char *[]);
-shellcmd xsh_pktgen(int, char *[]);
-shellcmd xsh_ps(int, char *[]);
-shellcmd xsh_rdate(int, char *[]);
-shellcmd xsh_reset(int, char *[]);
-shellcmd xsh_route(int, char *[]);
-shellcmd xsh_sleep(int, char *[]);
-shellcmd xsh_snoop(int, char *[]);
-shellcmd xsh_tar(int, char *[]);
-shellcmd xsh_tcpstat(int, char *[]);
-shellcmd xsh_telnet(int, char *[]);
-shellcmd xsh_telnetserver(int, char *[]);
-shellcmd xsh_test(int, char *[]);
-shellcmd xsh_testsuite(int, char *[]);
-shellcmd xsh_timeserver(int, char *[]);
-shellcmd xsh_turtle(int, char *[]);
-shellcmd xsh_uartstat(int, char *[]);
-shellcmd xsh_udpstat(int, char *[]);
-shellcmd xsh_usbinfo(int, char *[]);
-shellcmd xsh_user(int, char *[]);
-shellcmd xsh_vlanstat(int, char *[]);
-shellcmd xsh_voip(int, char *[]);
-shellcmd xsh_xweb(int, char *[]);
-
-#endif                          /* _SHELL_H_ */
+extern	uint32	ncmd;
+extern	const	struct	cmdent	cmdtab[];

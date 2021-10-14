@@ -1,74 +1,52 @@
-/**
- * @file     clkinit.c
- *
+/* clkinit.c - clkinit (x86) */
+
+#include <xinu.h>
+
+uint32	clktime;		/* Seconds since boot			*/
+uint32	count1000;		/* Milliseconds since last clock tick   */
+qid16	sleepq;			/* Queue of sleeping processes		*/
+uint32	preempt;		/* Preemption counter			*/
+
+volatile struct hpet_csreg *hpet = (struct hpet_csreg *)
+						HPET_BASE_ADDR;
+
+/*------------------------------------------------------------------------
+ * clkinit  -  Initialize the clock and sleep queue at startup (x86)
+ *------------------------------------------------------------------------
  */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
-
-#include <conf.h>
-
-#if RTCLOCK
-
-#include <kernel.h>
-#include <stddef.h>
-#include <platform.h>
-#include <interrupt.h>
-#include <clock.h>
-#include <queue.h>
-
-/** @ingroup timer
- *
- * Number of timer interrupts that have occurred since ::clktime was
- * incremented.  When ::clkticks reaches ::CLKTICKS_PER_SEC, ::clktime is
- * incremented again and ::clkticks is reset to 0.
- */
-volatile ulong clkticks;
-
-/** @ingroup timer
- * Number of seconds that have elapsed since the system booted.  */
-volatile ulong clktime;
-
-/** Queue of sleeping processes.  */
-qid_typ sleepq;
-
-/* TODO: Get rid of ugly x86 ifdef.  */
-#ifdef _XINU_PLATFORM_X86_
-extern void clockIRQ(void);
-#define CLOCKBASE 0x40         /* I/O base port of clock chip for x86 */
-#define CLOCKCTL (CLOCKBASE+3) /* chip CSW I/O port for x86           */
-ulong time_intr_freq = 0;     /** frequency of XINU clock interrupt   */
-#endif
-
-/**
- * @ingroup timer
- *
- * Initialize the clock and sleep queue.  This function is called at startup.
- */
-void clkinit(void)
+void	clkinit(void)
 {
-    sleepq = queinit();         /* initialize sleep queue       */
+	/* Allocate a queue to hold the delta list of sleeping processes*/
 
-    clkticks = 0;
+	sleepq = newqueue();
 
-#ifdef DETAIL
-    kprintf("Time base %dHz, Clock ticks at %dHz\r\n",
-            platform.clkfreq, CLKTICKS_PER_SEC);
-#endif
+	/* Initialize the preemption count */
 
-    /* TODO: Get rid of ugly x86 ifdef.  */
-#ifdef _XINU_PLATFORM_X86_
-	time_intr_freq = platform.clkfreq / CLKTICKS_PER_SEC;
-	outb(CLOCKCTL, 0x34);
-	/* LSB then MSB */
-	outb(CLOCKBASE, time_intr_freq);
-	outb(CLOCKBASE, time_intr_freq >> 8);
-	outb(CLOCKBASE, time_intr_freq >> 8); /* why??? */
-	set_evec(IRQBASE, (ulong)clockIRQ);
-#else
-    /* register clock interrupt */
-    interruptVector[IRQ_TIMER] = clkhandler;
-    enable_irq(IRQ_TIMER);
-    clkupdate(platform.clkfreq / CLKTICKS_PER_SEC);
-#endif
+	preempt = QUANTUM;
+
+	/* Initialize the time since boot to zero */
+
+	clktime = 0;
+        count1000 = 0;
+	/* Set interrupt vector for the clock to invoke clkdisp */
+
+	ioapic_irq2vec(2, IRQBASE);
+
+	set_ivec(IRQBASE, clkhandler, 0);
+
+	hpet->gc = 0;
+
+	hpet->mcv_l = 0;
+	hpet->mcv_u = 0;
+
+	hpet->t0cc_l |= HPET_TXCC_TVS;
+	hpet->t0cv_l = 14318;
+	hpet->t0cc_l |= HPET_TXCC_TVS;
+	hpet->t0cv_u = 0;
+
+	hpet->t0cc_l = HPET_TXCC_IT | HPET_TXCC_TYP | HPET_TXCC_IE;
+
+	hpet->gc = HPET_GC_OE;
+
+	return;
 }
-
-#endif                          /* RTCLOCK */

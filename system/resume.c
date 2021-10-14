@@ -1,35 +1,31 @@
-/**
- * @file resume.c
- *
- */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+/* resume.c - resume */
 
-#include <thread.h>
-#include <queue.h>
+#include <xinu.h>
 
-/**
- * @ingroup threads
- *
- * Unsuspend a thread, making it ready
- * @param tid target thread
- * @return priority
+/*------------------------------------------------------------------------
+ *  resume  -  Unsuspend a process, making it ready
+ *------------------------------------------------------------------------
  */
-syscall resume(tid_typ tid)
+pri16	resume(
+	  pid32		pid		/* ID of process to unsuspend	*/
+	)
 {
-    register struct thrent *thrptr;     /* thread control block  */
-    irqmask im;
-    int prio;
+	intmask	mask;			/* Saved interrupt mask		*/
+	struct	procent *prptr;		/* Ptr to process's table entry	*/
+	pri16	prio;			/* Priority to return		*/
 
-    im = disable();
-    thrptr = &thrtab[tid];
-    if (isbadtid(tid) || (thrptr->state != THRSUSP))
-    {
-        restore(im);
-        return SYSERR;
-    }
-
-    prio = thrptr->prio;
-    ready(tid, RESCHED_YES);
-    restore(im);
-    return prio;
+	mask = disable();
+	if (isbadpid(pid)) {
+		restore(mask);
+		return (pri16)SYSERR;
+	}
+	prptr = &proctab[pid];
+	if (prptr->prstate != PR_SUSP) {
+		restore(mask);
+		return (pri16)SYSERR;
+	}
+	prio = prptr->prprio;		/* Record priority to return	*/
+	ready(pid);
+	restore(mask);
+	return prio;
 }

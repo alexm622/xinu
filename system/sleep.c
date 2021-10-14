@@ -1,52 +1,53 @@
-/**
- * @file sleep.c
- *
- */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+/* sleep.c - sleep sleepms */
 
-#include <kernel.h>
-#include <stddef.h>
-#include <interrupt.h>
-#include <thread.h>
-#include <queue.h>
-#include <clock.h>
+#include <xinu.h>
 
-/**
- * @ingroup threads
- *
- * Yields the processor for the specified number of milliseconds, allowing other
- * threads to be scheduled.
- *
- * @param ms number of milliseconds to sleep
- *
- * @return
- *      If successful, the thread will sleep for the specified number of
- *      milliseconds, then return ::OK.  Otherwise, ::SYSERR will be returned.
- *      If a system timer is not supported, ::SYSERR will always returned.
+#define	MAXSECONDS	2147483		/* Max seconds per 32-bit msec	*/
+
+/*------------------------------------------------------------------------
+ *  sleep  -  Delay the calling process n seconds
+ *------------------------------------------------------------------------
  */
-syscall sleep(uint ms)
+syscall	sleep(
+	  int32	delay		/* Time to delay in seconds	*/
+	)
 {
-#if RTCLOCK
-    irqmask im;
-    int ticks = 0;
+	if ( (delay < 0) || (delay > MAXSECONDS) ) {
+		return SYSERR;
+	}
+	sleepms(1000*delay);
+	return OK;
+}
 
-    ticks = (ms * CLKTICKS_PER_SEC) / 1000;
+/*------------------------------------------------------------------------
+ *  sleepms  -  Delay the calling process n milliseconds
+ *------------------------------------------------------------------------
+ */
+syscall	sleepms(
+	  int32	delay			/* Time to delay in msec.	*/
+	)
+{
+	intmask	mask;			/* Saved interrupt mask		*/
 
-    im = disable();
-    if (ticks > 0)
-    {
-        if (SYSERR == insertd(thrcurrent, sleepq, ticks))
-        {
-            restore(im);
-            return SYSERR;
-        }
-        thrtab[thrcurrent].state = THRSLEEP;
-    }
+	if (delay < 0) {
+		return SYSERR;
+	}
 
-    resched();
-    restore(im);
-    return OK;
-#else
-    return SYSERR;
-#endif
+	if (delay == 0) {
+		yield();
+		return OK;
+	}
+
+	/* Delay calling process */
+
+	mask = disable();
+	if (insertd(currpid, sleepq, delay) == SYSERR) {
+		restore(mask);
+		return SYSERR;
+	}
+
+	proctab[currpid].prstate = PR_SLEEP;
+	resched();
+	restore(mask);
+	return OK;
 }

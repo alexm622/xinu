@@ -1,144 +1,165 @@
-/**
- * @file     xsh_memdump.c
- */
-/* Embedded Xinu, Copyright (C) 2009, 2013.  All rights reserved. */
+/* xsh_memdump.c - xsh_memdump */
 
-#include <ctype.h>
-#include <debug.h>
-#include <mips.h>
-#include <platform.h>
-#include <stddef.h>
-#include <stdio.h>
+#include <xinu.h>
 #include <string.h>
+#include <stdio.h>
 
-static ulong string_to_addr(const char *s);
+static	uint32	parseval(char *);
+extern	uint32	start;
 
-#define INVALID_ADDR (~(ulong)0)
-
-static bool address_range_sane(ulong start, ulong len)
-{
-    if (len == 0)
-    {
-        return TRUE;
-    }
-    if (start + len < start)
-    {
-        return FALSE;
-    }
-#ifdef _XINU_ARCH_MIPS_
-    return (KSEG0_BASE <= start && start + len <= KSEG2_BASE);
-#else
-    return ((ulong)platform.minaddr <= start &&
-            start + len <= (ulong)platform.maxaddr);
-#endif
-}
-
-/**
- * @ingroup shell
- *
- * Dump a region of memory to stdout.
- * @param nargs number of arguments
- * @param args  array of arguments
- * @return non-zero value on error
+/*------------------------------------------------------------------------
+ * xsh_memdump - dump a region of memory by displaying values in hex
+ *			 and ascii
+ *------------------------------------------------------------------------
  */
 shellcmd xsh_memdump(int nargs, char *args[])
 {
-    bool canon = FALSE;
-    bool force = FALSE;
-    ulong start, length;
-    ushort arg;
+	bool8	force = FALSE;		/* ignore address sanity checks	*/
+	uint32	begin;			/* begining address		*/
+	uint32	stop;			/* last address to dump		*/
+	uint32	length;			/* length of region to dump	*/
+	int32	arg;			/* index into args array	*/
+	uint32	l;			/* counts length during dump	*/
+	int32	i;			/* counts words during dump	*/
+	uint32	*addr;			/* address to dump		*/
+	char	*chptr;			/* character address to dump	*/
+	char	ch;			/* next character to print	*/
 
-    /* Output help, if '--help' argument was supplied */
-    if (nargs == 2 && strcmp(args[1], "--help") == 0)
-    {
-        printf("Usage: %s [-C] [-f] <START> <LENGTH>\n\n", args[0]);
-        printf("Description:\n");
-        printf("\tDumps the region of memory starting at START\n");
-        printf("\tand completing at START+LENGTH to standard out\n");
-        printf("\tSTART and LENGTH can be hex or dec.\n");
-        printf("Options:\n");
-        printf("\t<START>\t\tregion of memory at which to start\n");
-        printf("\t<LENGTH>\tlength to be dumped\n");
-        printf("\t-C\t\tdisplay in canonical mode (hex+ASCII)\n");
-        printf("\t-f\t\tignore sanity checks for addresses\n");
-        printf("\t--help\t\tdisplay this help and exit\n");
-        return 1;
-    }
+	/* For argument '--help', emit help about the 'memdump' command	*/
 
-    if (nargs < 3 || nargs > 5)
-    {
-        fprintf(stderr, "%s: too few arguments\n", args[0]);
-        fprintf(stderr, "Try '%s --help' for more information\n",
-                args[0]);
-        return 1;
-    }
+	if (nargs == 2 && strncmp(args[1], "--help", 7) == 0) {
+		printf("Use: %s [-f] Address Length\n\n", args[0]);
+		printf("Description:\n");
+		printf("\tDumps Length bytes of memory begining at the\n");
+		printf("\tspecified starting address (both the address\n");
+		printf("\tand length can be specified in decimal or hex)\n");
+		printf("Options:\n");
+		printf("\t-f         ignore sanity checks for addresses\n");
+		printf("\tAddress    memory address at which to start\n");
+		printf("\tLength     the number of bytes to dump\n");
+		printf("\t--help     display this help and exit\n");
+		return 0;
+	}
 
-    for (arg = 1; arg < nargs; arg++)
-    {
-        if (0 == strcmp(args[arg], "-C"))
-        {
-            canon = TRUE;
-        }
-        else if (0 == strcmp(args[arg], "-f"))
-        {
-            force = TRUE;
-        }
-        else
-        {
-            break;
-        }
-        nargs--;
-    }
+	/* Check for valid number of arguments */
 
-    if (nargs != 3)
-    {
-        fprintf(stderr, "%s: too few arguments\n", args[0]);
-        fprintf(stderr, "Try '%s --help' for more information\n",
-                args[0]);
-        return 1;
-    }
+	if (nargs < 3 || nargs > 4) {
+		fprintf(stderr, "%s: incorrect number of arguments\n",
+				args[0]);
+		fprintf(stderr, "Try '%s --help' for more information\n",
+				args[0]);
+		return 1;
+	}
 
-    start = string_to_addr(args[arg + 0]);
-    length = string_to_addr(args[arg + 1]);
+	arg = 1;
+	if (strncmp(args[arg], "-f", 2) == 0) {
+		force = TRUE;
+		arg++;
+		nargs --;
+	}
 
-    if (INVALID_ADDR == start || INVALID_ADDR == length)
-    {
-        fprintf(stderr, "%s: invalid argument\n", args[0]);
-        fprintf(stderr, "Try '%s --help' for more information\n",
-                args[0]);
-        return 1;
-    }
+	if (nargs != 3) {
+		fprintf(stderr, "%s: too few arguments\n", args[0]);
+		fprintf(stderr, "Try '%s --help' for more information\n",
+				args[0]);
+		return 1;
+	}
 
-    /* make sure the memdump values are somewhat sane */
-    if ((TRUE == force) || address_range_sane(start, length))
-    {
-        hexdump((uchar *)start, length, canon);
-    }
-    else
-    {
-        printf("Your values seem insane. Use -f to force.\n");
-    }
+	if ( (begin=parseval(args[arg])) == 0 ) {
+		fprintf(stderr, "%s: invalid begining address\n",
+				args[0]);
+		return 1;
+	}
+	if ( (length =parseval(args[arg+1])) == 0 ) {
+		fprintf(stderr, "%s: invalid length address\n",
+				args[0]);
+		return 1;
+	}
 
-    return 0;
+	/* Round begining address down to multiple of four and round	*/
+	/*	length up to a multiple of four				*/
+
+	begin &= ~0x3;
+	length = (length + 3) & ~0x3;
+
+	/* Add length to begin address */
+
+	stop = begin + length;
+
+	/* verify that the address and length are reasonable */
+
+	if ( force || ( (begin >= (uint32)&start) && (stop > begin) &&
+					(((void *)stop) < maxheap)) ) {
+
+		/* values are valid; perform dump */
+
+		chptr = (char *)begin;
+		for (l=0; l<length; l+=16) {
+			printf("%08x: ", begin);
+			addr = (uint32 *)begin;
+			for (i=0; i<4; i++) {
+				printf("%08x ",*addr++);
+			}
+			printf("  *");
+			for (i=0; i<16; i++) {
+				ch = *chptr++;
+				if ( (ch >= 0x20) && (ch <= 0x7e) ) {
+					printf("%c",ch);
+				} else {
+					printf(".");
+				}
+			}
+			printf("*\n");
+			begin += 16;
+		}
+		return 0;
+	} else {
+		printf("Values are out of range; use -f to force\n");
+	}
+	return 1;
 }
 
-static ulong string_to_addr(const char *string)
+/*------------------------------------------------------------------------
+ * parse - parse an argument that is either a decimal or hex value
+ *------------------------------------------------------------------------
+ */
+static	uint32	parseval(
+	  char	*string			/* argument string to parse	*/
+	)
 {
-    ulong n;
-    const char *scan = string;
-    const char *format = "%lu";
-    if (string[0] == '0' && (string[1] == 'x' || string[1] == 'X'))
-    {
-        scan += 2;
-        format = "%lx";
-    }
-    else if (string[0] == '0' && isdigit((uchar)string[1]))
-    {
-        format = "%lo";
-    }
-    if (sscanf(scan, format, &n) != 1)
-    {
-        n = INVALID_ADDR;
-    }
-    return n;
+	uint32	value;			/* value to return		*/
+	char	ch;			/* next character		*/
+	
+
+	value = 0;
+
+	/* argument string must consists of decimal digits or	*/
+	/*	0x followed by hex digits			*/
+
+	ch = *string++;
+	if (ch == '0') {		/* hexadecimal */
+		if (*string++ != 'x') {
+			return 0;
+		}
+		for (ch = *string++; ch != NULLCH; ch = *string++) {
+			if ((ch >= '0') && (ch <= '9') ) {
+				value = 16*value + (ch - '0');
+			} else if ((ch >= 'a') && (ch <= 'f') ) {
+				value = 16*value + 10 + (ch - 'a');
+			} else if ((ch >= 'A') && (ch <= 'F') ) {
+				value = 16*value + 10 + (ch - 'A');
+			} else {
+				return 0;
+			}
+		}
+	} else {			/* decimal */
+		while (ch != NULLCH) {
+			if ( (ch < '0') || (ch > '9') ) {
+				return 0;
+			}
+			value = 10*value + (ch - '0');
+			ch = *string++;
+		}
+	}
+	return value;
 }

@@ -1,43 +1,36 @@
-/**
- * @file insert.c
- *
- */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+/* insert.c - insert */
 
-#include <stddef.h>
-#include <thread.h>
-#include <queue.h>
+#include <xinu.h>
 
-/**
- * @ingroup threads
- *
- * Insert a thread into a queue in descending key order.
- * @param tid    thread ID to insert
- * @param q      target queue
- * @param key    sorting key
- * @return OK
+/*------------------------------------------------------------------------
+ *  insert  -  Insert a process into a queue in descending key order
+ *------------------------------------------------------------------------
  */
-int insert(tid_typ tid, qid_typ q, int key)
+status	insert(
+	  pid32		pid,		/* ID of process to insert	*/
+	  qid16		q,		/* ID of queue to use		*/
+	  int32		key		/* Key for the inserted process	*/
+	)
 {
-    int next;                   /* runs through list         */
-    int prev;                   /* follows next through list */
+	qid16	curr;			/* Runs through items in a queue*/
+	qid16	prev;			/* Holds previous node index	*/
 
-    if (isbadqid(q) || isbadtid(tid))
-    {
-        return SYSERR;
-    }
+	if (isbadqid(q) || isbadpid(pid)) {
+		return SYSERR;
+	}
 
-    next = quetab[quehead(q)].next;
-    while (quetab[next].key >= key)
-    {
-        next = quetab[next].next;
-    }
+	curr = firstid(q);
+	while (queuetab[curr].qkey >= key) {
+		curr = queuetab[curr].qnext;
+	}
 
-    /* insert tid between prev and next */
-    quetab[tid].next = next;
-    quetab[tid].prev = prev = quetab[next].prev;
-    quetab[tid].key = key;
-    quetab[prev].next = tid;
-    quetab[next].prev = tid;
-    return OK;
+	/* Insert process between curr node and previous node */
+
+	prev = queuetab[curr].qprev;	/* Get index of previous node	*/
+	queuetab[pid].qnext = curr;
+	queuetab[pid].qprev = prev;
+	queuetab[pid].qkey = key;
+	queuetab[prev].qnext = pid;
+	queuetab[curr].qprev = pid;
+	return OK;
 }

@@ -1,386 +1,313 @@
-/**
- * @file     shell.c
- *
- */
-/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+/* shell.c  -  shell */
 
-#include <stddef.h>
-#include <ctype.h>
-#include <interrupt.h>
-#include <shell.h>
+#include <xinu.h>
 #include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <tty.h>
-#include <thread.h>
-#include <nvram.h>
-#include <conf.h>
-#include <framebuffer.h>
+#include "shprototypes.h"
 
-const struct centry commandtab[] = {
-#if NETHER
-    {"arp", FALSE, xsh_arp},
-#endif
-    {"clear", TRUE, xsh_clear},
-    {"date", FALSE, xsh_date},
-#if USE_TLB
-    {"dumptlb", FALSE, xsh_dumptlb},
-#endif
-#if NETHER
-    {"ethstat", FALSE, xsh_ethstat},
-#endif
-    {"exit", TRUE, xsh_exit},
-#if NFLASH
-    {"flashstat", FALSE, xsh_flashstat},
-#endif
-#ifdef GPIO_BASE
-    {"gpiostat", FALSE, xsh_gpiostat},
-#endif
-    {"help", FALSE, xsh_help},
-#if defined(ETH0) || defined(_XINU_PLATFORM_ARM_RPI_)
-    {"kexec", FALSE, xsh_kexec},
-#endif
-    {"kill", TRUE, xsh_kill},
-#ifdef GPIO_BASE
-    {"led", FALSE, xsh_led},
-#endif
-    {"memstat", FALSE, xsh_memstat},
-    {"memdump", FALSE, xsh_memdump},
-#if NETHER
-    {"nc", FALSE, xsh_nc},
-    {"netdown", FALSE, xsh_netdown},
-#if NETEMU
-    {"netemu", FALSE, xsh_netemu},
-#endif
-    {"netstat", FALSE, xsh_netstat},
-    {"netup", FALSE, xsh_netup},
-#endif
-#if NVRAM
-    {"nvram", FALSE, xsh_nvram},
-#endif
-    {"ps", FALSE, xsh_ps},
-#if NETHER
-    {"ping", FALSE, xsh_ping},
-    {"pktgen", FALSE, xsh_pktgen},
-    {"rdate", FALSE, xsh_rdate},
-#endif
-    {"reset", FALSE, xsh_reset},
-#if NETHER
-    {"route", FALSE, xsh_route},
-#endif
-    {"sleep", TRUE, xsh_sleep},
-#if NETHER
-    {"snoop", FALSE, xsh_snoop},
-#endif
-#if USE_TAR
-    {"tar", FALSE, xsh_tar},
-#endif
-#if NETHER
-    {"tcpstat", FALSE, xsh_tcpstat},
-    {"telnet", FALSE, xsh_telnet},
-    {"telnetserver", FALSE, xsh_telnetserver},
-#endif
-    {"test", FALSE, xsh_test},
-#if HAVE_TESTSUITE
-    {"testsuite", TRUE, xsh_testsuite},
-#endif
-#if NETHER
-    {"timeserver", FALSE, xsh_timeserver},
-#endif
-#if FRAMEBUF
-    {"turtle", FALSE, xsh_turtle},
-#endif
-#if NUART
-    {"uartstat", FALSE, xsh_uartstat},
-#endif
-#ifdef WITH_USB
-    {"usbinfo", FALSE, xsh_usbinfo},
-#endif
-#if USE_TLB
-    {"user", FALSE, xsh_user},
-#endif
-#if NETHER
-    {"udpstat", FALSE, xsh_udpstat},
-    {"vlanstat", FALSE, xsh_vlanstat},
-    {"voip", FALSE, xsh_voip},
-    {"xweb", FALSE, xsh_xweb},
-#endif
-    {"?", FALSE, xsh_help}
+/************************************************************************/
+/* Table of Xinu shell commands and the function associated with each	*/
+/************************************************************************/
+const	struct	cmdent	cmdtab[] = {
+	{"argecho",	TRUE,	xsh_argecho},
+	{"arp",		FALSE,	xsh_arp},
+	{"cat",		FALSE,	xsh_cat},
+	{"clear",	TRUE,	xsh_clear},
+	{"date",	FALSE,	xsh_date},
+	{"devdump",	FALSE,	xsh_devdump},
+	{"echo",	FALSE,	xsh_echo},
+	{"exit",	TRUE,	xsh_exit},
+	{"help",	FALSE,	xsh_help},
+	{"kill",	TRUE,	xsh_kill},
+	{"memdump",	FALSE,	xsh_memdump},
+	{"memstat",	FALSE,	xsh_memstat},
+	{"netinfo",	FALSE,	xsh_netinfo},
+	{"ping",	FALSE,	xsh_ping},
+	{"ps",		FALSE,	xsh_ps},
+	{"sleep",	FALSE,	xsh_sleep},
+	{"udp",		FALSE,	xsh_udpdump},
+	{"udpecho",	FALSE,	xsh_udpecho},
+	{"udpeserver",	FALSE,	xsh_udpeserver},
+	{"uptime",	FALSE,	xsh_uptime},
+	{"?",		FALSE,	xsh_help}
+
 };
 
-ulong ncommand = sizeof(commandtab) / sizeof(struct centry);
-extern ulong foreground;
+uint32	ncmd = sizeof(cmdtab) / sizeof(struct cmdent);
 
-/**
- * @ingroup shell
- *
- * The Xinu shell.  Provides an interface to execute commands.
- * @param descrp descriptor of device on which the shell is open
- * @return OK for successful exit, SYSERR for unrecoverable error
- */
-thread shell(int indescrp, int outdescrp, int errdescrp)
+/************************************************************************/
+/* shell  -  Provide an interactive user interface that executes	*/
+/*	     commands.  Each command begins with a command name, has	*/
+/*	     a set of optional arguments, has optional input or		*/
+/*	     output redirection, and an optional specification for	*/
+/*	     background execution (ampersand).  The syntax is:		*/
+/*									*/
+/*		   command_name [args*] [redirection] [&]		*/
+/*									*/
+/*	     Redirection is either or both of:				*/
+/*									*/
+/*				< input_file				*/
+/*			or						*/
+/*				> output_file				*/
+/*									*/
+/************************************************************************/
+
+process	shell (
+		did32	dev		/* ID of tty device from which	*/
+	)				/*   to accept commands		*/
 {
-    char buf[SHELL_BUFLEN];     /* line input buffer        */
-    short buflen;               /* length of line input     */
-    char tokbuf[SHELL_BUFLEN + SHELL_MAXTOK];   /* token value buffer       */
-    short ntok;                 /* number of tokens         */
-    char *tok[SHELL_MAXTOK];    /* pointers to token values */
-    char *outname;              /* name of output file      */
-    char *inname;               /* name of input file       */
-    bool background;            /* is background proccess?  */
-    syscall child;              /* pid of child thread      */
-    ushort i, j;                /* temp variables           */
-    irqmask im;                 /* interrupt mask state     */
-    char *hostptr = NULL;       /* pointer to hostname      */
+	char	buf[SHELL_BUFLEN];	/* Input line (large enough for	*/
+					/*   one line from a tty device	*/
+	int32	len;			/* Length of line read		*/
+	char	tokbuf[SHELL_BUFLEN +	/* Buffer to hold a set of	*/
+			SHELL_MAXTOK];  /* Contiguous null-terminated	*/
+					/* Strings of tokens		*/
+	int32	tlen;			/* Current length of all data	*/
+					/*   in array tokbuf		*/
+	int32	tok[SHELL_MAXTOK];	/* Index of each token in	*/
+					/*   array tokbuf		*/
+	int32	toktyp[SHELL_MAXTOK];	/* Type of each token in tokbuf	*/
+	int32	ntok;			/* Number of tokens on line	*/
+	pid32	child;			/* Process ID of spawned child	*/
+	bool8	backgnd;		/* Run command in background?	*/
+	char	*outname, *inname;	/* Pointers to strings for file	*/
+					/*   names that follow > and <	*/
+	did32	stdinput, stdoutput;	/* Descriptors for redirected	*/
+					/*   input and output		*/
+	int32	i;			/* Index into array of tokens	*/
+	int32	j;			/* Index into array of commands	*/
+	int32	msg;			/* Message from receive() for	*/
+					/*   child termination		*/
+	int32	tmparg;			/* Address of this var is used	*/
+					/*   when first creating child	*/
+					/*   process, but is replaced	*/
+	char	*src, *cmp;		/* Pointers used during name	*/
+					/*   comparison			*/
+	bool8	diff;			/* Was difference found during	*/
+					/*   comparison			*/
+	char	*args[SHELL_MAXTOK];	/* Argument vector passed to	*/
+					/*   builtin commands		*/
 
-    /* Setup buffer for string for nvramGet call for hostname */
-#if defined(ETH0) && NVRAM
-    char hostnm[NET_HOSTNM_MAXLEN + 1]; /* hostname of backend      */
-    if (!isbaddev(ETH0))
-    {
-        size_t hostname_strsz;          /* nvram hostname name size */
+	/* Print shell banner and startup message */
 
-        bzero(hostnm, NET_HOSTNM_MAXLEN + 1);
+	fprintf(dev, "\n\n%s%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
+		SHELL_BAN0,SHELL_BAN1,SHELL_BAN2,SHELL_BAN3,SHELL_BAN4,
+		SHELL_BAN5,SHELL_BAN6,SHELL_BAN7,SHELL_BAN8,SHELL_BAN9);
 
-        /* Determine the hostname of the main network device */
-        hostname_strsz = strlen(NET_HOSTNAME);
-        hostname_strsz += 1;
-        hostname_strsz += DEVMAXNAME;
-        hostname_strsz += 1;
-        char nvramget_hostname_str[hostname_strsz];
-        sprintf(nvramget_hostname_str, "%s_%s", devtab[ETH0].name,
-                NET_HOSTNAME);
+	fprintf(dev, "%s\n\n", SHELL_STRTMSG);
 
-        /* Acquire the backend's hostname */
-        hostptr = nvramGet(nvramget_hostname_str);
-        if (hostptr != NULL)
-        {
-            strncpy(hostnm, hostptr, NET_HOSTNM_MAXLEN);
-            hostptr = hostnm;
-        }
-    }
-#endif
+	/* Continually prompt the user, read input, and execute command	*/
 
-    /* Set command devices for input, output, and error */
-    stdin = indescrp;
-    stdout = outdescrp;
-    stderr = errdescrp;
+	while (TRUE) {
 
-    /* Print shell banner to framebuffer, if exists */
-#if defined(FRAMEBUF)
-    if (indescrp == FRAMEBUF)
-    {
-        foreground = RASPBERRY;
-        printf(SHELL_BANNER_NONVT100);
-        foreground = LEAFGREEN;
-        printf(SHELL_START);
-        foreground = GREEN;
-    }
-    else
-#endif
-    {
-        printf(SHELL_BANNER);
-        printf(SHELL_START);
-    }
+		/* Display prompt */
 
-    /* Continually receive and handle commands */
-    while (TRUE)
-    {
-        /* Display prompt */
-        printf(SHELL_PROMPT);
+		fprintf(dev, SHELL_PROMPT);
 
-        if (NULL != hostptr)
-        {
-            printf("@%s$ ", hostptr);
-        }
-        else
-        {
-            printf("$ ");
-        }
+		/* Read a command */
 
-        /* Setup proper tty modes for input and output */
-        control(stdin, TTY_CTRL_CLR_IFLAG, TTY_IRAW, NULL);
-        control(stdin, TTY_CTRL_SET_IFLAG, TTY_ECHO, NULL);
+		len = read(dev, buf, sizeof(buf));
 
-        /* Read command */
-        buflen = read(stdin, buf, SHELL_BUFLEN - 1);
+		/* Exit gracefully on end-of-file */
 
-        /* Check for EOF and exit gracefully if seen */
-        if (EOF == buflen)
-        {
-            break;
-        }
+		if (len == EOF) {
+			break;
+		}
 
-        /* Parse line input into tokens */
-        if (SYSERR == (ntok = lexan(buf, buflen, &tokbuf[0], &tok[0])))
-        {
-            fprintf(stderr, SHELL_SYNTAXERR);
-            continue;
-        }
+		/* If line contains only NEWLINE, go to next line */
 
-        /* Ensure parse generated tokens */
-        if (0 == ntok)
-        {
-            continue;
-        }
+		if (len <= 1) {
+			continue;
+		}
 
-        /* Initialize command options */
-        inname = NULL;
-        outname = NULL;
-        background = FALSE;
+		buf[len] = SH_NEWLINE;	/* terminate line */
 
-        /* Mark as background thread, if last token is '&' */
-        if ('&' == *tok[ntok - 1])
-        {
-            ntok--;
-            background = TRUE;
-        }
+		/* Parse input line and divide into tokens */
 
-        /* Check each token and perform special handling of '>' and '<' */
-        for (i = 0; i < ntok; i++)
-        {
-            /* Background '&' should have already been handled; Syntax error */
-            if ('&' == *tok[i])
-            {
-                ntok = -1;
-                break;
-            }
+		ntok = lexan(buf, len, tokbuf, &tlen, tok, toktyp);
 
-            /* Setup for output redirection if token is '>'  */
-            if ('>' == *tok[i])
-            {
-                /* Syntax error */
-                if (outname != NULL || i >= ntok - 1)
-                {
-                    ntok = -1;
-                    break;
-                }
+		/* Handle parsing error */
 
-                outname = tok[i + 1];
-                ntok -= 2;
+		if (ntok == SYSERR) {
+			fprintf(dev,"%s\n", SHELL_SYNERRMSG);
+			continue;
+		}
 
-                /* shift tokens (not to be passed to command */
-                for (j = i; j < ntok; j++)
-                {
-                    tok[j] = tok[j + 2];
-                }
-                continue;
-            }
+		/* If line is empty, go to next input line */
 
-            /* Setup for input redirection if token is '<' */
-            if ('<' == *tok[i])
-            {
-                /* Syntax error */
-                if (inname != NULL || i >= ntok - 1)
-                {
-                    ntok = -1;
-                    break;
-                }
-                inname = tok[i + 1];
-                ntok -= 2;
+		if (ntok == 0) {
+			fprintf(dev, "\n");
+			continue;
+		}
 
-                /* shift tokens (not to be passed to command */
-                for (j = i; j < ntok; j++)
-                {
-                    tok[j] = tok[j + 2];
-                }
+		/* If last token is '&', set background */
 
-                continue;
-            }
-        }
+		if (toktyp[ntok-1] == SH_TOK_AMPER) {
+			ntok-- ;
+			tlen-= 2;
+			backgnd = TRUE;
+		} else {
+			backgnd = FALSE;
+		}
 
-        /* Handle syntax error */
-        if (ntok <= 0)
-        {
-            fprintf(stderr, SHELL_SYNTAXERR);
-            continue;
-        }
 
-        /* Lookup first token in the command table */
-        for (i = 0; i < ncommand; i++)
-        {
-            if (0 == strcmp(commandtab[i].name, tok[0]))
-            {
-                break;
-            }
-        }
+		/* Check for input/output redirection (default is none) */
 
-        /* Handle command not found */
-        if (i >= ncommand)
-        {
-            fprintf(stderr, "%s: command not found\n", tok[0]);
-            continue;
-        }
+		outname = inname = NULL;
+		if ( (ntok >=3) && ( (toktyp[ntok-2] == SH_TOK_LESS)
+				   ||(toktyp[ntok-2] == SH_TOK_GREATER))){
+			if (toktyp[ntok-1] != SH_TOK_OTHER) {
+				fprintf(dev,"%s\n", SHELL_SYNERRMSG);
+				continue;
+			}
+			if (toktyp[ntok-2] == SH_TOK_LESS) {
+				inname =  &tokbuf[tok[ntok-1]];
+			} else {
+				outname = &tokbuf[tok[ntok-1]];
+			}
+			ntok -= 2;
+			tlen = tok[ntok];
+		}
 
-        /* Handle command if it is built-in */
-        if (commandtab[i].builtin)
-        {
-            if (inname != NULL || outname != NULL || background)
-            {
-                fprintf(stderr, SHELL_SYNTAXERR);
-            }
-            else
-            {
-                (*commandtab[i].procedure) (ntok, tok);
-            }
-            continue;
-        }
 
-        /* Spawn child thread for non-built-in commands */
-        child =
-            create(commandtab[i].procedure,
-                   SHELL_CMDSTK, SHELL_CMDPRIO,
-                   commandtab[i].name, 2, ntok, tok);
+		if ( (ntok >=3) && ( (toktyp[ntok-2] == SH_TOK_LESS)
+				   ||(toktyp[ntok-2] == SH_TOK_GREATER))){
+			if (toktyp[ntok-1] != SH_TOK_OTHER) {
+				fprintf(dev,"%s\n", SHELL_SYNERRMSG);
+				continue;
+			}
+			if (toktyp[ntok-2] == SH_TOK_LESS) {
+				if (inname != NULL) {
+				    fprintf(dev,"%s\n", SHELL_SYNERRMSG);
+				    continue;
+				}
+				inname = &tokbuf[tok[ntok-1]];
+			} else {
+				if (outname != NULL) {
+				    fprintf(dev,"%s\n", SHELL_SYNERRMSG);
+				    continue;
+				}
+				outname = &tokbuf[tok[ntok-1]];
+			}
+			ntok -= 2;
+			tlen = tok[ntok];
+		}
 
-        /* Ensure child command thread was created successfully */
-        if (SYSERR == child)
-        {
-            fprintf(stderr, SHELL_CHILDERR);
-            continue;
-        }
+		/* Verify remaining tokens are type "other" */
 
-        /* Set file descriptors for newly created thread */
-        if (NULL == inname)
-        {
-            thrtab[child].fdesc[0] = stdin;
-        }
-        else
-        {
-            thrtab[child].fdesc[0] = getdev(inname);
-        }
-        if (NULL == outname)
-        {
-            thrtab[child].fdesc[1] = stdout;
-        }
-        else
-        {
-            thrtab[child].fdesc[1] = getdev(outname);
-        }
-        thrtab[child].fdesc[2] = stderr;
+		for (i=0; i<ntok; i++) {
+			if (toktyp[i] != SH_TOK_OTHER) {
+				break;
+			}
+		}
+		if ((ntok == 0) || (i < ntok)) {
+			fprintf(dev, SHELL_SYNERRMSG);
+			continue;
+		}
 
-        if (background)
-        {
-            /* Make background thread ready, but don't reschedule */
-            im = disable();
-            ready(child, RESCHED_NO);
-            restore(im);
-        }
-        else
-        {
-            /* Clear waiting message; Reschedule; */
-            while (recvclr() != NOMSG);
-            im = disable();
-            ready(child, RESCHED_YES);
-            restore(im);
+		stdinput = stdoutput = dev;
 
-            /* Wait for command thread to finish */
-            while (receive() != child);
-            sleep(10);
-        }
+		/* Lookup first token in the command table */
+
+		for (j = 0; j < ncmd; j++) {
+			src = cmdtab[j].cname;
+			cmp = tokbuf;
+			diff = FALSE;
+			while (*src != NULLCH) {
+				if (*cmp != *src) {
+					diff = TRUE;
+					break;
+				}
+				src++;
+				cmp++;
+			}
+			if (diff || (*cmp != NULLCH)) {
+				continue;
+			} else {
+				break;
+			}
+		}
+
+		/* Handle command not found */
+
+		if (j >= ncmd) {
+			fprintf(dev, "command %s not found\n", tokbuf);
+			continue;
+		}
+
+		/* Handle built-in command */
+
+		if (cmdtab[j].cbuiltin) { /* No background or redirect. */
+			if (inname != NULL || outname != NULL || backgnd){
+				fprintf(dev, SHELL_BGERRMSG);
+				continue;
+			} else {
+				/* Set up arg vector for call */
+
+				for (i=0; i<ntok; i++) {
+					args[i] = &tokbuf[tok[i]];
+				}
+
+				/* Call builtin shell function */
+
+				if ((*cmdtab[j].cfunc)(ntok, args)
+							== SHELL_EXIT) {
+					break;
+				}
+			}
+			continue;
+		}
+
+		/* Open files and redirect I/O if specified */
+
+		if (inname != NULL) {
+			stdinput = open(NAMESPACE,inname,"ro");
+			if (stdinput == SYSERR) {
+				fprintf(dev, SHELL_INERRMSG, inname);
+				continue;
+			}
+		}
+		if (outname != NULL) {
+			stdoutput = open(NAMESPACE,outname,"w");
+			if (stdoutput == SYSERR) {
+				fprintf(dev, SHELL_OUTERRMSG, outname);
+				continue;
+			} else {
+				control(stdoutput, F_CTL_TRUNC, 0, 0);
+			}
+		}
+
+		/* Spawn child thread for non-built-in commands */
+
+		child = create(cmdtab[j].cfunc,
+			SHELL_CMDSTK, SHELL_CMDPRIO,
+			cmdtab[j].cname, 2, ntok, &tmparg);
+
+		/* If creation or argument copy fails, report error */
+
+		if ((child == SYSERR) ||
+		    (addargs(child, ntok, tok, tlen, tokbuf, &tmparg)
+							== SYSERR) ) {
+			fprintf(dev, SHELL_CREATMSG);
+			continue;
+		}
+
+		/* Set stdinput and stdoutput in child to redirect I/O */
+
+		proctab[child].prdesc[0] = stdinput;
+		proctab[child].prdesc[1] = stdoutput;
+
+		msg = recvclr();
+		resume(child);
+		if (! backgnd) {
+			msg = receive();
+			while (msg != child) {
+				msg = receive();
+			}
+		}
     }
 
-    /* Close shell */
-    fprintf(stdout, SHELL_EXIT);
-    sleep(10);
+    /* Terminate the shell process by returning from the top level */
+
+    fprintf(dev,SHELL_EXITMSG);
     return OK;
 }
