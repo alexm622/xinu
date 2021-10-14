@@ -1,62 +1,88 @@
-/* xsh_ps.c - xsh_ps */
+/**
+ * @file     xsh_ps.c 
+ *
+ */
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
 
-#include <xinu.h>
+#include <stddef.h>
+#include <thread.h>
 #include <stdio.h>
 #include <string.h>
 
-/*------------------------------------------------------------------------
- * xsh_ps - shell command to print the process table
- *------------------------------------------------------------------------
+/**
+ * @ingroup shell
+ *
+ * Shell command (ps) outputs thread table information.
+ * @param nargs number of arguments in args array
+ * @param args  array of arguments
+ * @return non-zero value on error
  */
 shellcmd xsh_ps(int nargs, char *args[])
 {
-	struct	procent	*prptr;		/* pointer to process		*/
-	int32	i;			/* index into proctabl		*/
-	char *pstate[]	= {		/* names for process states	*/
-		"free ", "curr ", "ready", "recv ", "sleep", "susp ",
-		"wait ", "rtime"};
+    struct thrent *thrptr;      /* pointer to thread entry  */
+    int i;                      /* temp variable            */
 
-	/* For argument '--help', emit help about the 'ps' command	*/
+    /* readable names for PR* status in thread.h */
+    static const char * const pstnams[] = {
+        "curr ", "free ", "ready", "recv ",
+        "sleep", "susp ", "wait ", "rtim "
+    };
 
-	if (nargs == 2 && strncmp(args[1], "--help", 7) == 0) {
-		printf("Use: %s\n\n", args[0]);
-		printf("Description:\n");
-		printf("\tDisplays information about running processes\n");
-		printf("Options:\n");
-		printf("\t--help\t display this help and exit\n");
-		return 0;
-	}
+    /* Output help, if '--help' argument was supplied */
+    if (nargs == 2 && strcmp(args[1], "--help") == 0)
+    {
+        printf("Usage: %s\n\n", args[0]);
+        printf("Description:\n");
+        printf("\tDisplays a table of running threads.\n");
+        printf("Options:\n");
+        printf("\t--help\t display this help and exit\n");
 
-	/* Check for valid number of arguments */
+        return 0;
+    }
 
-	if (nargs > 1) {
-		fprintf(stderr, "%s: too many arguments\n", args[0]);
-		fprintf(stderr, "Try '%s --help' for more information\n",
-				args[0]);
-		return 1;
-	}
+    /* Check for correct number of arguments */
+    if (nargs > 1)
+    {
+        fprintf(stderr, "%s: too many arguments\n", args[0]);
+        fprintf(stderr, "Try '%s --help' for more information\n",
+                args[0]);
+        return 1;
+    }
 
-	/* Print header for items from the process table */
+    /* Output thread table header */
+/*    printf(
+            "TID NAME         STATE PRIO PPID STACK BASE STACK PTR  STACK LEN \n");
 
-	printf("%3s %-16s %5s %4s %4s %10s %-10s %10s\n",
-		   "Pid", "Name", "State", "Prio", "Ppid", "Stack Base",
-		   "Stack Ptr", "Stack Size");
+    printf(
+            "--- ------------ ----- ---- ---- ---------- ---------- ----------\n");
+*/
 
-	printf("%3s %-16s %5s %4s %4s %10s %-10s %10s\n",
-		   "---", "----------------", "-----", "----", "----",
-		   "----------", "----------", "----------");
+    printf("%3s %-16s %5s %4s %4s %10s %-10s %10s\n",
+           "TID", "NAME", "STATE", "PRIO", "PPID", "STACK BASE",
+           "STACK PTR", "STACK LEN");
 
-	/* Output information for each process */
 
-	for (i = 0; i < NPROC; i++) {
-		prptr = &proctab[i];
-		if (prptr->prstate == PR_FREE) {  /* skip unused slots	*/
-			continue;
-		}
-		printf("%3d %-16s %s %4d %4d 0x%08X 0x%08X %8d\n",
-			i, prptr->prname, pstate[(int)prptr->prstate],
-			prptr->prprio, prptr->prparent, prptr->prstkbase,
-			prptr->prstkptr, prptr->prstklen);
-	}
-	return 0;
+    printf("%3s %-16s %5s %4s %4s %10s %-10s %10s\n",
+           "---", "----------------", "-----", "----", "----",
+           "----------", "----------", " ---------");
+
+    /* Output information for each thread */
+    for (i = 0; i < NTHREAD; i++)
+    {
+        thrptr = &thrtab[i];
+        if (thrptr->state == THRFREE)
+        {
+            continue;
+        }
+
+        printf("%3d %-16s %s %4d %4d 0x%08lX 0x%08lX %10lu\n",
+               i, thrptr->name,
+               pstnams[(int)thrptr->state - 1],
+               thrptr->prio, thrptr->parent,
+               (ulong)thrptr->stkbase,
+               (ulong)thrptr->stkptr,
+               thrptr->stklen);
+    }
+
+    return 0;
 }

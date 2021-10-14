@@ -1,27 +1,35 @@
-/* putc.c - putc */
-
-#include <xinu.h>
-
-/*------------------------------------------------------------------------
- *  putc  -  Send one character of data (byte) to a device
- *------------------------------------------------------------------------
+/**
+ * @file putc.c
  */
-syscall	putc(
-	  did32		descrp,		/* Descriptor for device	*/
-	  char		ch		/* Character to send		*/
-	)
-{
-	intmask		mask;		/* Saved interrupt mask		*/
-	struct dentry	*devptr;	/* Entry in device switch table	*/
-	int32		retval;		/* Value to return to caller	*/
+/* Embedded Xinu, Copyright (C) 2009, 2013.  All rights reserved. */
 
-	mask = disable();
-	if (isbaddev(descrp)) {
-		restore(mask);
-		return SYSERR;
-	}
-	devptr = (struct dentry *) &devtab[descrp];
-	retval = (*devptr->dvputc) (devptr, ch);
-	restore(mask);
-	return retval;
+#include <stddef.h>
+#include <device.h>
+
+/**
+ * @ingroup devcalls
+ *
+ * Write one character to a device.
+ *
+ * @param descrp
+ *      Index of device to which to write the character.
+ * @param ch
+ *      character to write
+ *
+ * @return
+ *      On success, returns the character written as an <code>unsigned
+ *      char</code> cast to an @c int.  On bad device descripter, returns @c
+ *      ::SYSERR.  On other failure, returns ::SYSERR or ::EOF depending on the
+ *      specific device driver it calls.
+ */
+devcall putc(int descrp, char ch)
+{
+    device *devptr;
+
+    if (isbaddev(descrp))
+    {
+        return SYSERR;
+    }
+    devptr = (device *)&devtab[descrp];
+    return ((*devptr->putc) (devptr, ch));
 }

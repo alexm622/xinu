@@ -1,52 +1,51 @@
-/* clkhandler.c - clkhandler */
-
-#include <xinu.h>
-
-/*------------------------------------------------------------------------
- * clkhandler - high level clock interrupt handler
- *------------------------------------------------------------------------
+/**
+ * @file     clkhandler.c
  */
-void	clkhandler(
-		int32	arg	/* Interrupt handler argument	*/
-		)
+/* Embedded Xinu, Copyright (C) 2009, 2013.  All rights reserved. */
+
+#include <stddef.h>
+#include <queue.h>
+#include <clock.h>
+#include <thread.h>
+#include <platform.h>
+
+#if RTCLOCK
+
+void wakeup(void);
+int resched(void);
+
+/**
+ * @ingroup timer
+ *
+ * Interrupt handler function for the timer interrupt.  This schedules a new
+ * timer interrupt to occur at some point in the future, then updates ::clktime
+ * and ::clkticks, then wakes sleeping threads if there are any, otherwise
+ * reschedules the processor.
+ */
+interrupt clkhandler(void)
 {
+    clkupdate(platform.clkfreq / CLKTICKS_PER_SEC);
 
-	if(!(hpet->gis & HPET_GIS_T0)) {
-		return;
-	}
+    /* Another clock tick passes. */
+    clkticks++;
 
-	hpet->gis |= HPET_GIS_T0;
+    /* Update global second counter. */
+    if (CLKTICKS_PER_SEC == clkticks)
+    {
+        clktime++;
+        clkticks = 0;
+    }
 
-	/* Decrement the ms counter, and see if a second has passed */
-
-	if((++count1000) >= 1000) {
-
-		/* One second has passed, so increment seconds count */
-
-		clktime++;
-
-		/* Reset the local ms counter for the next second */
-
-		count1000 = 0;
-	}
-
-	/* Handle sleeping processes if any exist */
-
-	if(!isempty(sleepq)) {
-
-		/* Decrement the delay for the first process on the	*/
-		/*   sleep queue, and awaken if the count reaches zero	*/
-
-		if((--queuetab[firstid(sleepq)].qkey) <= 0) {
-			wakeup();
-		}
-	}
-
-	/* Decrement the preemption counter, and reschedule when the */
-	/*   remaining time reaches zero			     */
-
-	if((--preempt) <= 0) {
-		preempt = QUANTUM;
-		resched();
-	}
+    /* If sleepq is not empty, decrement first key.   */
+    /* If key reaches zero, call wakeup.              */
+    if (nonempty(sleepq) && (--firstkey(sleepq) <= 0))
+    {
+        wakeup();
+    }
+    else
+    {
+        resched();
+    }
 }
+
+#endif /* RTCLOCK */

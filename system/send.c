@@ -1,41 +1,49 @@
-/* send.c - send */
-
-#include <xinu.h>
-
-/*------------------------------------------------------------------------
- *  send  -  Pass a message to a process and start recipient if waiting
- *------------------------------------------------------------------------
+/**
+ * @file send.c
+ *
  */
-syscall	send(
-	  pid32		pid,		/* ID of recipient process	*/
-	  umsg32	msg		/* Contents of message		*/
-	)
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+
+#include <thread.h>
+
+/**
+ * @ingroup threads
+ *
+ * Send a message to another thread
+ * @param tid thread id of recipient
+ * @param msg contents of message
+ * @return OK on success, SYSERR on failure
+ */
+syscall send(tid_typ tid, message msg)
 {
-	intmask	mask;			/* Saved interrupt mask		*/
-	struct	procent *prptr;		/* Ptr to process's table entry	*/
+    register struct thrent *thrptr;
+    irqmask im;
 
-	mask = disable();
-	if (isbadpid(pid)) {
-		restore(mask);
-		return SYSERR;
-	}
+    im = disable();
+    if (isbadtid(tid))
+    {
+        restore(im);
+        return SYSERR;
+    }
+    thrptr = &thrtab[tid];
+    if ((THRFREE == thrptr->state) || thrptr->hasmsg)
+    {
+        restore(im);
+        return SYSERR;
+    }
+    thrptr->msg = msg;          /* deposit message                */
+    thrptr->hasmsg = TRUE;      /* raise message flag             */
 
-	prptr = &proctab[pid];
-	if (prptr->prhasmsg) {
-		restore(mask);
-		return SYSERR;
-	}
-	prptr->prmsg = msg;		/* Deliver message		*/
-	prptr->prhasmsg = TRUE;		/* Indicate message is waiting	*/
-
-	/* If recipient waiting or in timed-wait make it ready */
-
-	if (prptr->prstate == PR_RECV) {
-		ready(pid);
-	} else if (prptr->prstate == PR_RECTIM) {
-		unsleep(pid);
-		ready(pid);
-	}
-	restore(mask);		/* Restore interrupts */
-	return OK;
+    /* if receiver waits, start it */
+    if (THRRECV == thrptr->state)
+    {
+        ready(tid, RESCHED_YES);
+    }
+    else if (THRTMOUT == thrptr->state)
+    {
+        unsleep(tid);
+        ready(tid, RESCHED_YES);
+    }
+    restore(im);
+    return OK;
 }

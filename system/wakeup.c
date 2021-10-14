@@ -1,20 +1,29 @@
-/* wakeup.c - wakeup */
-
-#include <xinu.h>
-
-/*------------------------------------------------------------------------
- *  wakeup  -  Called by clock interrupt handler to awaken processes
- *------------------------------------------------------------------------
+/**
+ * @file wakeup.c
+ *
  */
-void	wakeup(void)
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+
+#include <stddef.h>
+#include <thread.h>
+#include <queue.h>
+#include <clock.h>
+
+#if RTCLOCK
+
+/**
+ * @ingroup threads
+ *
+ * Wakeup and ready all threads that have no more time to sleep
+ */
+void wakeup(void)
 {
-	/* Awaken all processes that have no more time to sleep */
+    while (nonempty(sleepq) && (firstkey(sleepq) <= 0))
+    {
+        ready(dequeue(sleepq), RESCHED_NO);
+    }
 
-	resched_cntl(DEFER_START);
-	while (nonempty(sleepq) && (firstkey(sleepq) <= 0)) {
-		ready(dequeue(sleepq));
-	}
-
-	resched_cntl(DEFER_STOP);
-	return;
+    resched();
 }
+
+#endif /* RTCLOCK */

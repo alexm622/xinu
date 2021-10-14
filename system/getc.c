@@ -1,26 +1,33 @@
-/* getc.c - getc */
-
-#include <xinu.h>
-
-/*------------------------------------------------------------------------
- *  getc  -  Obtain one byte from a device
- *------------------------------------------------------------------------
+/**
+ * @file getc.c
  */
-syscall	getc(
-	  did32		descrp		/* Descriptor for device	*/
-	)
-{
-	intmask		mask;		/* Saved interrupt mask		*/
-	struct dentry	*devptr;	/* Entry in device switch table	*/
-	int32		retval;		/* Value to return to caller	*/
+/* Embedded Xinu, Copyright (C) 2009, 2013.  All rights reserved. */
 
-	mask = disable();
-	if (isbaddev(descrp)) {
-		restore(mask);
-		return SYSERR;
-	}
-	devptr = (struct dentry *) &devtab[descrp];
-	retval = (*devptr->dvgetc) (devptr);
-	restore(mask);
-	return retval;
+#include <stddef.h>
+#include <device.h>
+
+/**
+ * @ingroup devcalls
+ *
+ * Read one character from a device.
+ *
+ * @param descrp
+ *      Index of device from which to read the character.
+ *
+ * @return
+ *      On success, returns the character read as an <code>unsigned char</code>
+ *      cast to an @c int.  On bad device descripter, returns ::SYSERR.  On
+ *      other failure, returns ::SYSERR or ::EOF depending on the specific
+ *      device driver it calls.
+ */
+devcall getc(int descrp)
+{
+    device *devptr;
+
+    if (isbaddev(descrp))
+    {
+        return SYSERR;
+    }
+    devptr = (device *)&devtab[descrp];
+    return ((*devptr->getc) (devptr));
 }

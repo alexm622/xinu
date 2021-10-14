@@ -1,121 +1,116 @@
-/* create.c - create, newpid */
-
-#include <xinu.h>
-
-local	int newpid();
-
-/*------------------------------------------------------------------------
- *  create  -  Create a process to start running a function on x86
- *------------------------------------------------------------------------
+/**
+ * @file create.c
  */
-pid32	create(
-	  void		*funcaddr,	/* Address of the function	*/
-	  uint32	ssize,		/* Stack size in bytes		*/
-	  pri16		priority,	/* Process priority > 0		*/
-	  char		*name,		/* Name (for debugging)		*/
-	  uint32	nargs,		/* Number of args that follow	*/
-	  ...
-	)
+/* Embedded Xinu, Copyright (C) 2007, 2013.  All rights reserved. */
+
+#include <platform.h>
+#include <string.h>
+#include <thread.h>
+
+static int thrnew(void);
+
+/**
+ * @ingroup threads
+ *
+ * Create a thread to start running a procedure.
+ *
+ * @param procaddr
+ *      procedure address
+ * @param ssize
+ *      stack size in bytes
+ * @param priority
+ *      thread priority (0 is lowest priority)
+ * @param name
+ *      name of the thread, used for debugging
+ * @param nargs
+ *      number of arguments that follow
+ * @param ...
+ *      arguments to pass to thread procedure
+ * @return
+ *      the new thread's thread id, or ::SYSERR if a new thread could not be
+ *      created (not enough memory or thread entries).
+ */
+tid_typ create(void *procaddr, uint ssize, int priority,
+               const char *name, int nargs, ...)
 {
-	uint32		savsp, *pushsp;
-	intmask 	mask;    	/* Interrupt mask		*/
-	pid32		pid;		/* Stores new process id	*/
-	struct	procent	*prptr;		/* Pointer to proc. table entry */
-	int32		i;
-	uint32		*a;		/* Points to list of args	*/
-	uint32		*saddr;		/* Stack address		*/
+    irqmask im;                 /* saved interrupt state               */
+    ulong *saddr;               /* stack address                       */
+    tid_typ tid;                /* new thread ID                       */
+    struct thrent *thrptr;      /* pointer to new thread control block */
+    va_list ap;                 /* list of thread arguments            */
 
-	mask = disable();
-	if (ssize < MINSTK)
-		ssize = MINSTK;
-	ssize = (uint32) roundmb(ssize);
-	if ( (priority < 1) || ((pid=newpid()) == SYSERR) ||
-	     ((saddr = (uint32 *)getstk(ssize)) == (uint32 *)SYSERR) ) {
-		restore(mask);
-		return SYSERR;
-	}
+    im = disable();
 
-	prcount++;
-	prptr = &proctab[pid];
+    if (ssize < MINSTK)
+    {
+        ssize = MINSTK;
+    }
 
-	/* Initialize process table entry for new process */
-	prptr->prstate = PR_SUSP;	/* Initial state is suspended	*/
-	prptr->prprio = priority;
-	prptr->prstkbase = (char *)saddr;
-	prptr->prstklen = ssize;
-	prptr->prname[PNMLEN-1] = NULLCH;
-	for (i=0 ; i<PNMLEN-1 && (prptr->prname[i]=name[i])!=NULLCH; i++)
-		;
-	prptr->prsem = -1;
-	prptr->prparent = (pid32)getpid();
-	prptr->prhasmsg = FALSE;
+    /* Allocate new stack.  */
+    saddr = stkget(ssize);
+    if (SYSERR == (int)saddr)
+    {
+        restore(im);
+        return SYSERR;
+    }
 
-	/* Set up stdin, stdout, and stderr descriptors for the shell	*/
-	prptr->prdesc[0] = CONSOLE;
-	prptr->prdesc[1] = CONSOLE;
-	prptr->prdesc[2] = CONSOLE;
+    /* Allocate new thread ID.  */
+    tid = thrnew();
+    if (SYSERR == (int)tid)
+    {
+        stkfree(saddr, ssize);
+        restore(im);
+        return SYSERR;
+    }
 
-	/* Initialize stack as if the process was called		*/
+    /* Set up thread table entry for new thread.  */
+    thrcount++;
+    thrptr = &thrtab[tid];
 
-	*saddr = STACKMAGIC;
-	savsp = (uint32)saddr;
+    thrptr->state = THRSUSP;
+    thrptr->prio = priority;
+    thrptr->stkbase = saddr;
+    thrptr->stklen = ssize;
+    strlcpy(thrptr->name, name, TNMLEN);
+    thrptr->parent = gettid();
+    thrptr->hasmsg = FALSE;
+    thrptr->memlist.next = NULL;
+    thrptr->memlist.length = 0;
 
-	/* Push arguments */
-	a = (uint32 *)(&nargs + 1);	/* Start of args		*/
-	a += nargs -1;			/* Last argument		*/
-	for ( ; nargs > 0 ; nargs--)	/* Machine dependent; copy args	*/
-		*--saddr = *a--;	/* onto created process's stack	*/
-	*--saddr = (long)INITRET;	/* Push on return address	*/
+    /* Set up default file descriptors.  */
+    thrptr->fdesc[0] = CONSOLE; /* stdin  is console */
+    thrptr->fdesc[1] = CONSOLE; /* stdout is console */
+    thrptr->fdesc[2] = CONSOLE; /* stderr is console */
 
-	/* The following entries on the stack must match what ctxsw	*/
-	/*   expects a saved process state to contain: ret address,	*/
-	/*   ebp, interrupt mask, flags, registers, and an old SP	*/
+    /* Set up new thread's stack with context record and arguments.
+     * Architecture-specific.  */
+    va_start(ap, nargs);
+    thrptr->stkptr = setupStack(saddr, procaddr, INITRET, nargs, ap);
+    va_end(ap);
 
-	*--saddr = (long)funcaddr;	/* Make the stack look like it's*/
-					/*   half-way through a call to	*/
-					/*   ctxsw that "returns" to the*/
-					/*   new process		*/
-	*--saddr = savsp;		/* This will be register ebp	*/
-					/*   for process exit		*/
-	savsp = (uint32) saddr;		/* Start of frame for ctxsw	*/
-	*--saddr = 0x00000200;		/* New process runs with	*/
-					/*   interrupts enabled		*/
-
-	/* Basically, the following emulates an x86 "pushal" instruction*/
-
-	*--saddr = 0;			/* %eax */
-	*--saddr = 0;			/* %ecx */
-	*--saddr = 0;			/* %edx */
-	*--saddr = 0;			/* %ebx */
-	*--saddr = 0;			/* %esp; value filled in below	*/
-	pushsp = saddr;			/* Remember this location	*/
-	*--saddr = savsp;		/* %ebp (while finishing ctxsw)	*/
-	*--saddr = 0;			/* %esi */
-	*--saddr = 0;			/* %edi */
-	*pushsp = (unsigned long) (prptr->prstkptr = (char *)saddr);
-	restore(mask);
-	return pid;
+    /* Restore interrupts and return new thread TID.  */
+    restore(im);
+    return tid;
 }
 
-/*------------------------------------------------------------------------
- *  newpid  -  Obtain a new (free) process ID
- *------------------------------------------------------------------------
+/*
+ * Obtain a new (free) thread ID.  Returns a free thread ID, or SYSERR if all
+ * thread IDs are already in use.  This assumes IRQs have been disabled so that
+ * the contents of the threads table are stable.
  */
-local	pid32	newpid(void)
+static int thrnew(void)
 {
-	uint32	i;			/* Iterate through all processes*/
-	static	pid32 nextpid = 1;	/* Position in table to try or	*/
-					/*   one beyond end of table	*/
+    int tid;
+    static int nexttid = 0;
 
-	/* Check all NPROC slots */
-
-	for (i = 0; i < NPROC; i++) {
-		nextpid %= NPROC;	/* Wrap around to beginning */
-		if (proctab[nextpid].prstate == PR_FREE) {
-			return nextpid++;
-		} else {
-			nextpid++;
-		}
-	}
-	return (pid32) SYSERR;
+    /* check all NTHREAD slots    */
+    for (tid = 0; tid < NTHREAD; tid++)
+    {
+        nexttid = (nexttid + 1) % NTHREAD;
+        if (THRFREE == thrtab[nexttid].state)
+        {
+            return nexttid;
+        }
+    }
+    return SYSERR;
 }

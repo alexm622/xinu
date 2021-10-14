@@ -1,29 +1,37 @@
-/* ready.c - ready */
-
-#include <xinu.h>
-
-qid16	readylist;			/* Index of ready list		*/
-
-/*------------------------------------------------------------------------
- *  ready  -  Make a process eligible for CPU service
- *------------------------------------------------------------------------
+/**
+ * @file ready.c
+ *
  */
-status	ready(
-	  pid32		pid		/* ID of process to make ready	*/
-	)
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+
+#include <thread.h>
+#include <queue.h>
+
+/**
+ * @ingroup threads
+ *
+ * Make a thread eligible for CPU service.
+ * @param tid target thread
+ * @param resch if RESCHED_YES, reschedules
+ * @return OK if thread has been added to readylist, else SYSERR
+ */
+int ready(tid_typ tid, bool resch)
 {
-	register struct procent *prptr;
+    register struct thrent *thrptr;
 
-	if (isbadpid(pid)) {
-		return SYSERR;
-	}
+    if (isbadtid(tid))
+    {
+        return SYSERR;
+    }
 
-	/* Set process state to indicate ready and add to ready list */
+    thrptr = &thrtab[tid];
+    thrptr->state = THRREADY;
 
-	prptr = &proctab[pid];
-	prptr->prstate = PR_READY;
-	insert(pid, readylist, prptr->prprio);
-	resched();
+    insert(tid, readylist, thrptr->prio);
 
-	return OK;
+    if (resch == RESCHED_YES)
+    {
+        resched();
+    }
+    return OK;
 }

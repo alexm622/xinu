@@ -1,50 +1,128 @@
-/* arp.h */
+/**
+ * @file arp.h
+ *
+ */
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
 
-/* Items related to ARP - definition of cache and the packet format */
+#ifndef _ARP_H_
+#define _ARP_H_
 
-#define	ARP_HALEN	6		/* Size of Ethernet MAC address	*/
-#define	ARP_PALEN	4		/* Size of IP address		*/
+#include <stddef.h>
+#include <mailbox.h>
+#include <network.h>
 
-#define	ARP_HTYPE	1		/* Ethernet hardware type	*/
-#define ARP_PTYPE	0x0800		/* IP protocol type		*/
+/* Tracing macros */
+//#define TRACE_ARP     TTY1
+#ifdef TRACE_ARP
+#include <stdio.h>
+#define ARP_TRACE(...)     { \
+		fprintf(TRACE_ARP, "%s:%d (%d) ", __FILE__, __LINE__, gettid()); \
+		fprintf(TRACE_ARP, __VA_ARGS__); \
+		fprintf(TRACE_ARP, "\n"); }
+#else
+#define ARP_TRACE(...)
+#endif
 
-#define ARP_OP_REQ	1		/* Request op code		*/
-#define ARP_OP_RPLY	2		/* Reply op code		*/
+/* ARP Hardware Types */
+#define ARP_HWTYPE_ETHERNET   1            /**< Hardware type ethernet */
 
-#define	ARP_SIZ		16		/* Number of entries in a cache	*/
+/* ARP Protocol Types */
+#define ARP_PRTYPE_IPv4       ETHER_TYPE_IPv4  /**< Protocol type IPv4     */
 
-#define	ARP_RETRY	3		/* Num. retries for ARP request	*/
+/* ARP Operations */
+#define ARP_OP_RQST 1              /**< ARP operation request           */
+#define ARP_OP_REPLY 2             /**< ARP operation reply             */
 
-#define	ARP_TIMEOUT	300		/* Retry timer in milliseconds	*/
+/* ARP Header */
+#define ARP_CONST_HDR_LEN   8
 
-/* State of an ARP cache entry */
+/* ARP Table */
+#define ARP_NENTRY         32      /**< Number of ARP table entries     */
+#define ARP_FREE           0       /**< Entry is free                   */
+#define ARP_USED           1       /**< Entry is used                   */
+/* ARP entry is unresolved if it is USED but not RESOLVED (0b01) */
+#define ARP_UNRESOLVED     1       /**< Entry is used but unresolved    */
+/* ARP entry is resolved if it is USED and RESOLVED (0b11) */
+#define ARP_RESOLVED        3      /**< Entry is used and resolved      */
+#define ARP_NTHRWAIT        10     /**< Num threads that can wait       */
 
-#define	AR_FREE		0		/* Slot is unused		*/
-#define	AR_PENDING	1		/* Resolution in progress	*/
-#define	AR_RESOLVED	2		/* Entry is valid		*/
+/* ARP Lookup */
+#define ARP_MAX_LOOKUP      5     /**< Num ARP lookup attempts per pkt  */
+#define ARP_MSG_RESOLVED    1     /**< Message shows arp resolution     */
 
-#pragma pack(2)
-struct	arppacket {			/* ARP packet for IP & Ethernet	*/
-	byte	arp_ethdst[ETH_ADDR_LEN];/* Ethernet dest. MAC addr	*/
-	byte	arp_ethsrc[ETH_ADDR_LEN];/* Ethernet source MAC address */
-	uint16	arp_ethtype;		/* Ethernet type field		*/
-	uint16	arp_htype;		/* ARP hardware type		*/
-	uint16	arp_ptype;		/* ARP protocol type		*/
-	byte	arp_hlen;		/* ARP hardware address length	*/
-	byte	arp_plen;		/* ARP protocol address length	*/
-	uint16	arp_op;			/* ARP operation		*/
-	byte	arp_sndha[ARP_HALEN];	/* ARP sender's Ethernet addr 	*/
-	uint32	arp_sndpa;		/* ARP sender's IP address	*/
-	byte	arp_tarha[ARP_HALEN];	/* ARP target's Ethernet addr	*/
-	uint32	arp_tarpa;		/* ARP target's IP address	*/
+/* Timing info */
+#define ARP_TTL_UNRESOLVED  5    /**< TTL in secs for unresolv entry  */
+#define ARP_TTL_RESOLVED    300   /**< TTL in secs for resolved entry  */
+
+/* ARP thread constants */
+#define ARP_THR_PRIO        NET_THR_PRIO   /**< ARP thread priority     */
+#define ARP_THR_STK         NET_THR_STK    /**< ARP thread stack size   */
+
+/* ARP packet header offset macros */
+#define ARP_ADDR_SHA(arp)   0
+#define ARP_ADDR_SPA(arp)   (arp->hwalen)
+#define ARP_ADDR_DHA(arp)   (arp->hwalen + arp->pralen)
+#define ARP_ADDR_DPA(arp)   ((2 * arp->hwalen) + arp->pralen)
+
+/* ARP daemon info */
+#define ARP_NQUEUE          32    /**< Number of pkts allowed in queue  */
+
+/*
+ * ARP HEADER
+ *
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * | Link-Level Header                                             |
+ * | ...                                                           |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * |        Hardware Type          |         Protocol Type         |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * | Hardware Len | Protocol Len   |          Operation            |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * | Source Hardware Address (SHA)                                 |
+ * | Source Protocol Address (SPA)                                 |
+ * | Destination Hardware Address (DHA)                            |
+ * | Destination Protocol Address (DPA)                            |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ */
+/* ARP packet header */
+struct arpPkt
+{
+    ushort hwtype;              /**< Hardware type                   */
+    ushort prtype;              /**< Protocol type                   */
+    uchar hwalen;               /**< Hardware address length         */
+    uchar pralen;               /**< Protocol address length         */
+    ushort op;                  /**< Operation                       */
+    uchar addrs[1];                 /**< Src & dst hdwr & proto addrs    */
 };
-#pragma pack()
 
-struct	arpentry {			/* Entry in the ARP cache	*/
-	int32	arstate;		/* State of the entry		*/
-	uint32	arpaddr;		/* IP address of the entry	*/
-	pid32	arpid;			/* Waiting process or -1 	*/
-	byte	arhaddr[ARP_HALEN];	/* Ethernet address of the entry*/
+/* ARP Table Entry */
+struct arpEntry
+{
+    ushort state;                    /**< ARP state for entry           */
+    struct netif *nif;                   /**< Network interface             */
+    struct netaddr hwaddr;               /**< Hardware address              */
+    struct netaddr praddr;               /**< Protocol address              */
+    uint expires;                    /**< clktime when entry expires    */
+    tid_typ waiting[ARP_NTHRWAIT];   /**< Threads waiting for entry     */
+    int count;                       /**< Count of threads waiting      */
 };
 
-extern struct	arpentry arpcache[];
+/* ARP table */
+extern struct arpEntry arptab[ARP_NENTRY];
+
+/* ARP packet queue for packets requiring reply */
+extern mailbox arpqueue;
+
+/* ARP Function Prototypes */
+struct arpEntry *arpAlloc(void);
+thread arpDaemon(void);
+struct arpEntry *arpGetEntry(const struct netaddr *);
+syscall arpFree(struct arpEntry *);
+syscall arpInit(void);
+syscall arpLookup(struct netif *, const struct netaddr *, struct netaddr *);
+syscall arpNotify(struct arpEntry *, message);
+syscall arpRecv(struct packet *);
+syscall arpSendRqst(struct arpEntry *);
+syscall arpSendReply(struct packet *);
+
+#endif                          /* _ARP_H_ */

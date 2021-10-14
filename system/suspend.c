@@ -1,41 +1,48 @@
-/* suspend.c - suspend */
-
-#include <xinu.h>
-
-/*------------------------------------------------------------------------
- *  suspend  -  Suspend a process, placing it in hibernation
- *------------------------------------------------------------------------
+/**
+ * @file suspend.c
+ *
  */
-syscall	suspend(
-	  pid32		pid		/* ID of process to suspend	*/
-	)
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+
+#include <thread.h>
+#include <queue.h>
+
+/**
+ * @ingroup threads
+ *
+ * Suspend a thread, placing it in hibernation
+ * @param tid target thread
+ * @return priority or SYSERR
+ */
+syscall suspend(tid_typ tid)
 {
-	intmask	mask;			/* Saved interrupt mask		*/
-	struct	procent *prptr;		/* Ptr to process's table entry	*/
-	pri16	prio;			/* Priority to return		*/
+    register struct thrent *thrptr;     /* thread control block  */
+    irqmask im;
+    int prio;
 
-	mask = disable();
-	if (isbadpid(pid) || (pid == NULLPROC)) {
-		restore(mask);
-		return SYSERR;
-	}
-
-	/* Only suspend a process that is current or ready */
-
-	prptr = &proctab[pid];
-	if ((prptr->prstate != PR_CURR) && (prptr->prstate != PR_READY)) {
-		restore(mask);
-		return SYSERR;
-	}
-	if (prptr->prstate == PR_READY) {
-		getitem(pid);		    /* Remove a ready process	*/
-					    /*   from the ready list	*/
-		prptr->prstate = PR_SUSP;
-	} else {
-		prptr->prstate = PR_SUSP;   /* Mark the current process	*/
-		resched();		    /*   suspended and resched.	*/
-	}
-	prio = prptr->prprio;
-	restore(mask);
-	return prio;
+    im = disable();
+    if (isbadtid(tid) || (NULLTHREAD == tid))
+    {
+        restore(im);
+        return SYSERR;
+    }
+    thrptr = &thrtab[tid];
+    if ((thrptr->state != THRCURR) && (thrptr->state != THRREADY))
+    {
+        restore(im);
+        return SYSERR;
+    }
+    if (THRREADY == thrptr->state)
+    {
+        getitem(tid);           /* removes from queue */
+        thrptr->state = THRSUSP;
+    }
+    else
+    {
+        thrptr->state = THRSUSP;
+        resched();
+    }
+    prio = thrptr->prio;
+    restore(im);
+    return prio;
 }

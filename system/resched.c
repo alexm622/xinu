@@ -1,80 +1,63 @@
-/* resched.c - resched, resched_cntl */
-
-#include <xinu.h>
-
-struct	defer	Defer;
-
-/*------------------------------------------------------------------------
- *  resched  -  Reschedule processor to highest priority eligible process
- *------------------------------------------------------------------------
+/**
+ * @file resched.c
+ *
  */
-void	resched(void)		/* Assumes interrupts are disabled	*/
-{
-	struct procent *ptold;	/* Ptr to table entry for old process	*/
-	struct procent *ptnew;	/* Ptr to table entry for new process	*/
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
 
-	/* If rescheduling is deferred, record attempt and return */
+#include <thread.h>
+#include <clock.h>
+#include <queue.h>
+#include <memory.h>
 
-	if (Defer.ndefers > 0) {
-		Defer.attempt = TRUE;
-		return;
-	}
+extern void ctxsw(void *, void *, uchar);
+int resdefer;                   /* >0 if rescheduling deferred */
 
-	/* Point to process table entry for the current (old) process */
-
-	ptold = &proctab[currpid];
-
-	if (ptold->prstate == PR_CURR) {  /* Process remains eligible */
-		if (ptold->prprio > firstkey(readylist)) {
-			return;
-		}
-
-		/* Old process will no longer remain current */
-
-		ptold->prstate = PR_READY;
-		insert(currpid, readylist, ptold->prprio);
-	}
-
-	/* Force context switch to highest priority ready process */
-
-	currpid = dequeue(readylist);
-	ptnew = &proctab[currpid];
-	ptnew->prstate = PR_CURR;
-	preempt = QUANTUM;		/* Reset time slice for process	*/
-	ctxsw(&ptold->prstkptr, &ptnew->prstkptr);
-
-	/* Old process returns here when resumed */
-
-	return;
-}
-
-/*------------------------------------------------------------------------
- *  resched_cntl  -  Control whether rescheduling is deferred or allowed
- *------------------------------------------------------------------------
+/**
+ * @ingroup threads
+ *
+ * Reschedule processor to highest priority ready thread.
+ * Upon entry, thrcurrent gives current thread id.
+ * Threadtab[thrcurrent].pstate gives correct NEXT state
+ * for current thread if other than THRREADY.
+ * @return OK when the thread is context switched back
  */
-status	resched_cntl(		/* Assumes interrupts are disabled	*/
-	  int32	defer		/* Either DEFER_START or DEFER_STOP	*/
-	)
+int resched(void)
 {
-	switch (defer) {
+    uchar asid;                 /* address space identifier */
+    struct thrent *throld;      /* old thread entry */
+    struct thrent *thrnew;      /* new thread entry */
 
-	    case DEFER_START:	/* Handle a deferral request */
+    if (resdefer > 0)
+    {                           /* if deferred, increase count & return */
+        resdefer++;
+        return (OK);
+    }
 
-		if (Defer.ndefers++ == 0) {
-			Defer.attempt = FALSE;
-		}
-		return OK;
+    throld = &thrtab[thrcurrent];
 
-	    case DEFER_STOP:	/* Handle end of deferral */
-		if (Defer.ndefers <= 0) {
-			return SYSERR;
-		}
-		if ( (--Defer.ndefers == 0) && Defer.attempt ) {
-			resched();
-		}
-		return OK;
+    throld->intmask = disable();
 
-	    default:
-		return SYSERR;
-	}
+    if (THRCURR == throld->state)
+    {
+        if (nonempty(readylist) && (throld->prio > firstkey(readylist)))
+        {
+            restore(throld->intmask);
+            return OK;
+        }
+        throld->state = THRREADY;
+        insert(thrcurrent, readylist, throld->prio);
+    }
+
+    /* get highest priority thread from ready list */
+    thrcurrent = dequeue(readylist);
+    thrnew = &thrtab[thrcurrent];
+    thrnew->state = THRCURR;
+
+    /* change address space identifier to thread id */
+    asid = thrcurrent & 0xff;
+    ctxsw(&throld->stkptr, &thrnew->stkptr, asid);
+
+    /* old thread returns here when resumed */
+    restore(throld->intmask);
+    return OK;
 }

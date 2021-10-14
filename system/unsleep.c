@@ -1,47 +1,51 @@
-/* unsleep.c - unsleep */
-
-#include <xinu.h>
-
-/*------------------------------------------------------------------------
- *  unsleep  -  Internal function to remove a process from the sleep
- *		    queue prematurely.  The caller must adjust the delay
- *		    of successive processes.
- *------------------------------------------------------------------------
+/**
+ * @file unsleep.c
+ *
  */
-status	unsleep(
-	  pid32		pid		/* ID of process to remove	*/
-        )
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+
+#include <kernel.h>
+#include <stddef.h>
+#include <interrupt.h>
+#include <thread.h>
+#include <queue.h>
+#include <clock.h>
+
+/**
+ * @ingroup threads
+ *
+ * Remove thread from the sleep queue prematurely
+ * @param tid  target thread
+ * @return OK if thread removed, else SYSERR
+ */
+syscall unsleep(tid_typ tid)
 {
-	intmask	mask;			/* Saved interrupt mask		*/
-        struct	procent	*prptr;		/* Ptr to process's table entry	*/
+    register struct thrent *thrptr;
+    irqmask im;
+    tid_typ next = 0;
 
-        pid32	pidnext;		/* ID of process on sleep queue	*/
-					/*   that follows the process	*/
-					/*   which is being removed	*/
+    im = disable();
 
-	mask = disable();
+    if (isbadtid(tid))
+    {
+        restore(im);
+        return SYSERR;
+    }
 
-	if (isbadpid(pid)) {
-		restore(mask);
-		return SYSERR;
-	}
+    thrptr = &thrtab[tid];
+    if ((thrptr->state != THRSLEEP) && (thrptr->state != THRTMOUT))
+    {
+        restore(im);
+        return SYSERR;
+    }
 
-	/* Verify that candidate process is on the sleep queue */
+    next = quetab[tid].next;
+    if (next < NTHREAD)
+    {
+        quetab[next].key += quetab[tid].key;
+    }
 
-	prptr = &proctab[pid];
-	if ((prptr->prstate!=PR_SLEEP) && (prptr->prstate!=PR_RECTIM)) {
-		restore(mask);
-		return SYSERR;
-	}
-
-	/* Increment delay of next process if such a process exists */
-
-	pidnext = queuetab[pid].qnext;
-	if (pidnext < NPROC) {
-		queuetab[pidnext].qkey += queuetab[pid].qkey;
-	}
-
-	getitem(pid);			/* Unlink process from queue */
-	restore(mask);
-	return OK;
+    getitem(tid);
+    restore(im);
+    return OK;
 }

@@ -1,28 +1,34 @@
-/* chprio.c - chprio */
-
-#include <xinu.h>
-
-/*------------------------------------------------------------------------
- *  chprio  -  Change the scheduling priority of a process
- *------------------------------------------------------------------------
+/**
+ * @file chprio.c
+ *
  */
-pri16	chprio(
-	  pid32		pid,		/* ID of process to change	*/
-	  pri16		newprio		/* New priority			*/
-	)
-{
-	intmask	mask;			/* Saved interrupt mask		*/
-	struct	procent *prptr;		/* Ptr to process's table entry	*/
-	pri16	oldprio;		/* Priority to return		*/
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
 
-	mask = disable();
-	if (isbadpid(pid)) {
-		restore(mask);
-		return (pri16) SYSERR;
-	}
-	prptr = &proctab[pid];
-	oldprio = prptr->prprio;
-	prptr->prprio = newprio;
-	restore(mask);
-	return oldprio;
+#include <thread.h>
+
+/**
+ * @ingroup threads
+ *
+ * Change the scheduling priority of a thread
+ * @param tid target thread
+ * @param newprio new priority
+ * @return old priority of thread
+ */
+syscall chprio(tid_typ tid, int newprio)
+{
+    register struct thrent *thrptr;     /* thread control block */
+    irqmask im;
+    int oldprio;
+
+    im = disable();
+    if (isbadtid(tid))
+    {
+        restore(im);
+        return SYSERR;
+    }
+    thrptr = &thrtab[tid];
+    oldprio = thrptr->prio;
+    thrptr->prio = newprio;
+    restore(im);
+    return oldprio;
 }

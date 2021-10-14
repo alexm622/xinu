@@ -1,19 +1,22 @@
-/* debug.c  -  hexdump_print, hexdump */
+/**
+ * @file     debug.c
+ * This file provides various debug utilities for development.
+ *
+ */
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
 
-#include <xinu.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <debug.h>
 
-static void hexdump_print(byte, byte);
+static void hexdump_print(uchar, uchar);
 
-/*------------------------------------------------------------------------
- *  hexdump_print   -  Print a byte in ASCII or hex
- *------------------------------------------------------------------------
+/**
+ * Print a byte of data in mode.
+ * @param data   byte of data to print
+ * @param mode   ASCII or HEX
  */
-static void hexdump_print(
-	 byte	data,			/* Item to print		*/
-	 byte	mode			/* ASCII or hex mode		*/
-	)
+static void hexdump_print(uchar data, uchar mode)
 {
     switch (mode)
     {
@@ -29,50 +32,58 @@ static void hexdump_print(
     }
 }
 
-
-/*------------------------------------------------------------------------
- *  hexdump   -  Dump a region of memory
- *------------------------------------------------------------------------
+/**
+ * @ingroup misc
+ *
+ * Dump a buffer of given length to stdout.
+ * @param *buffer buffer to print out data in
+ * @param length  length of buffer to print
+ * @param canon   canonical representation (hex+ASCII)
  */
-void	hexdump(
-	 void	*buffer,		/* Addresss of memory area	*/
-	 uint32	length,			/* Length in bytes		*/
-	 bool8	canon			/* Print in ASCII or hex	*/
-	)
+void hexdump(void *buffer, ulong length, bool canon)
 {
-    uint32 m, n, remain;
+    ulong m, n, remain;
 
-    byte *b = (byte *)buffer;
+    uchar *b = (uchar *)buffer;
 
-    for (n = 0; n < length; n += 0x10) {
-        fprintf(stdout, "%08x ", (uint32)buffer + n);
+    for (n = 0; n < length; n += 0x10)
+    {
+        fprintf(stdout, "%08lx ", (ulong)buffer + n);
 
         remain = length - n;
 
-        for (m = 0; m < remain && m < 0x10; m++) {
-            if (m % 0x08 == 0) {
+        for (m = 0; m < remain && m < 0x10; m++)
+        {
+            if (m % 0x08 == 0)
+            {
                 fprintf(stdout, " ");
             }
             hexdump_print(b[n + m], DEBUG_HEX);
         }
 
-        /* Pad the rest if needed */
-        if (remain < 0x10) {
-            for (m = 0; m < 0x10 - remain; m++) {
-                if ((0 != m) && (0 == m % 0x08)) {
+        /* pad the rest if needed */
+        if (remain < 0x10)
+        {
+            for (m = 0; m < 0x10 - remain; m++)
+            {
+                if ((0 != m) && (0 == m % 0x08))
+                {
                     fprintf(stdout, " ");
                 }
                 fprintf(stdout, "   ");
             }
         }
 
-        if (canon == TRUE) {
+        if (TRUE == canon)
+        {
             fprintf(stdout, " |");
-            for (m = 0; m < remain && m < 0x10; m++) {
+            for (m = 0; m < remain && m < 0x10; m++)
+            {
                 hexdump_print(b[n + m], DEBUG_ASCII);
             }
             fprintf(stdout, "|");
         }
+
         fprintf(stdout, "\n");
     }
 }

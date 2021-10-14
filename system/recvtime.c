@@ -1,44 +1,58 @@
-/* recvtime.c - recvtime */
-
-#include <xinu.h>
-
-/*------------------------------------------------------------------------
- *  recvtime  -  Wait specified time to receive a message and return
- *------------------------------------------------------------------------
+/**
+ * @file recvtime.c
+ *
  */
-umsg32	recvtime(
-	  int32		maxwait		/* Ticks to wait before timeout */
-        )
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+
+#include <conf.h>
+#include <stddef.h>
+#include <thread.h>
+#include <clock.h>
+
+/**
+ * @ingroup threads
+ *
+ * wait to receive a message or timeout and return result
+ * @param  maxwait ticks to wait before timeout
+ * @return msg if becomes available, TIMEOUT if no message
+ */
+message recvtime(int maxwait)
 {
-	intmask	mask;			/* Saved interrupt mask		*/
-	struct	procent	*prptr;		/* Tbl entry of current process	*/
-	umsg32	msg;			/* Message to return		*/
+    register struct thrent *thrptr;
+    irqmask im;
+    message msg;
 
-	if (maxwait < 0) {
-		return SYSERR;
-	}
-	mask = disable();
+    if (maxwait < 0)
+    {
+        return SYSERR;
+    }
+    im = disable();
+    thrptr = &thrtab[thrcurrent];
+    if (FALSE == thrptr->hasmsg)
+    {
+#if RTCLOCK
+        if (SYSERR == insertd(thrcurrent, sleepq, maxwait))
+        {
+            restore(im);
+            return SYSERR;
+        }
+        thrtab[thrcurrent].state = THRTMOUT;
+        resched();
+#else
+        restore(im);
+        return SYSERR;
+#endif
+    }
 
-	/* Schedule wakeup and place process in timed-receive state */
-
-	prptr = &proctab[currpid];
-	if (prptr->prhasmsg == FALSE) {	/* Delay if no message waiting	*/
-		if (insertd(currpid,sleepq,maxwait) == SYSERR) {
-			restore(mask);
-			return SYSERR;
-		}
-		prptr->prstate = PR_RECTIM;
-		resched();
-	}
-
-	/* Either message arrived or timer expired */
-
-	if (prptr->prhasmsg) {
-		msg = prptr->prmsg;	/* Retrieve message		*/
-		prptr->prhasmsg = FALSE;/* Reset message indicator	*/
-	} else {
-		msg = TIMEOUT;
-	}
-	restore(mask);
-	return msg;
+    if (thrptr->hasmsg)
+    {
+        msg = thrptr->msg;      /* retrieve message              */
+        thrptr->hasmsg = FALSE; /* reset message flag            */
+    }
+    else
+    {
+        msg = TIMEOUT;
+    }
+    restore(im);
+    return msg;
 }

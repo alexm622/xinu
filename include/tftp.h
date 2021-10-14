@@ -1,66 +1,95 @@
-/* tftp.h - definitions for trivial file transfer protocol */
+/**
+ * @file tftp.h
+ */
+/* Embedded Xinu, Copyright (C) 2013.  All rights reserved. */
 
-/* TFTP Packet Op codes */
-#define TFTP_RRQ   1   /* Read Request    */
-#define TFTP_WRQ   2   /* Write Request   */
-#define TFTP_DATA  3   /* Data Packet     */
-#define TFTP_ACK   4   /* Acknowledgement */
-#define TFTP_ERROR 5   /* Error           */
+#ifndef _TFTP_H_
+#define _TFTP_H_
 
-/* TFTP Error Codes */
-#define TFTP_ERROR_NOT_DEFINED         0  /* Not defined, see error message (if any). */
-#define TFTP_ERROR_FILE_NOT_FOUND      1  /* File not found.                          */
-#define TFTP_ERROR_ACCESS_VIOLATION    2  /* Access violation.                        */
-#define TFTP_ERROR_DISK_FULL           3  /* Disk full or allocation exceeded.        */
-#define TFTP_ERROR_ILLEGAL_OP          4  /* Illegal TFTP operation.                  */
-#define TFTP_ERROR_UNKNOWN_TRANSFER_ID 5  /* Unknown transfer ID.                     */
-#define TFTP_ERROR_FILE_EXISTS         6  /* File already exists.                     */
-#define TFTP_ERROR_NO_SUCH_USER        7  /* No such user.                            */
+#include <stddef.h>
+#include <network.h>
+#include <stdint.h>
 
-#define TFTP_PORT       69      /* UDP Port for TFTP            */
-#define	TFTP_MAXNAM	64      /* Max length of a file name    */
-#define	TFTP_MAXDATA    512     /* Max size of a data packet    */
-#define	TFTP_MAXRETRIES	3       /* Number of retranmissions     */
-#define	TFTP_WAIT       5000    /* Time to wait for reply (ms)  */
+#define TFTP_OPCODE_RRQ   1
+#define TFTP_OPCODE_WRQ   2
+#define TFTP_OPCODE_DATA  3
+#define TFTP_OPCODE_ACK   4
+#define TFTP_OPCODE_ERROR 5
 
-#define TFTP_FUNC_MAGIC	0xFFFFFF00	/* Magic value used to indicate	*/
-					/*	input to tftpget is a	*/
-					/*	function pointer	*/
+#define TFTP_RECV_THR_STK   NET_THR_STK
+#define TFTP_RECV_THR_PRIO  NET_THR_PRIO
 
-/* Format of a TFTP message (items following opcode depend on msg type)	*/
+/* Maximum number of seconds to wait for a block, other than the first, before
+ * aborting the TFTP transfer.  */
+#define TFTP_BLOCK_TIMEOUT      10
 
-#pragma pack(1)
-struct	tftp_msg {
-	uint16		tf_opcode;	/* One of the opcodes above	*/
-	union {
+/** Maximum number of seconds to wait for the first block before re-sending the
+ * RREQ.  */
+#define TFTP_INIT_BLOCK_TIMEOUT 1
 
-	 /* Items in a RRQ or WRQ message */
+/** Maximum number of times to send the initial RREQ.  */
+#define TFTP_INIT_BLOCK_MAX_RETRIES 10
 
-	 struct	{
-	  char	tf_filemode[TFTP_MAXNAM+10]; /* file name and mode	*/
-	 };
+#define TFTP_BLOCK_SIZE     512
 
-	 /* Items in a Data packet */
+//#define ENABLE_TFTP_TRACE
 
-	 struct {
-	  uint16	tf_dblk;	/* Block number of this data	*/
-	  char		tf_data[TFTP_MAXDATA]; /* Actual data		*/
-	 };
+#ifdef ENABLE_TFTP_TRACE
+#  include <stdio.h>
+#  include <thread.h>
+#  define TFTP_TRACE(format, ...)                                     \
+do                                                                    \
+{                                                                     \
+    fprintf(stderr, "%s:%d (%d) ", __FILE__, __LINE__, gettid());     \
+    fprintf(stderr, format, ## __VA_ARGS__);                          \
+    fprintf(stderr, "\n");                                            \
+} while (0)
+#else
+#  define TFTP_TRACE(format, ...)
+#endif
 
-	 /* Items in an ACK packet */
-
-	 struct {
-	  uint16	tf_ablk;	/* Block number being acked	*/
-	 };
-
-	/* Items in an Error packet */
-
-	 struct {
-	  uint16	tf_ercode;	/* Integer error code		*/
-	  char		tf_ermsg[TFTP_MAXDATA]; /* Error message	*/
-	 };
-	};
+struct tftpPkt
+{
+    uint16_t opcode;
+    union
+    {
+        struct
+        {
+            char filename_and_mode[2 + TFTP_BLOCK_SIZE];
+        } RRQ;
+        struct
+        {
+            uint16_t block_number;
+            uint8_t data[TFTP_BLOCK_SIZE];
+        } DATA;
+        struct
+        {
+            uint16_t block_number;
+        } ACK;
+    };
 };
-#pragma pack()
 
-status tftpget(uint32, const char*, void*, uint32);
+#define TFTP_MAX_PACKET_LEN      516
+
+/**
+ * @ingroup tftp
+ *
+ * Type of a caller-provided callback function that consumes data downloaded by
+ * tftpGet().  See tftpGet() for more details.
+ */
+typedef int (*tftpRecvDataFunc)(const uchar *data, uint len, void *ctx);
+
+syscall tftpGet(const char *filename, const struct netaddr *local_ip,
+                const struct netaddr *server_ip, tftpRecvDataFunc recvDataFunc,
+                void *recvDataCtx);
+
+syscall tftpGetIntoBuffer(const char *filename, const struct netaddr *local_ip,
+                          const struct netaddr *server_ip, uint *len_ret);
+
+thread tftpRecvPackets(int udpdev, struct tftpPkt *pkt, tid_typ parent);
+
+syscall tftpSendACK(int udpdev, ushort block_number);
+
+syscall tftpSendRRQ(int udpdev, const char *filename);
+
+#endif /* _TFTP_H_ */

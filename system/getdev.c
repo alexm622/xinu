@@ -1,26 +1,35 @@
-/* getdev.c - getdev */
+/**
+ * @file     getdev.c
+ *
+ */
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
 
-#include <xinu.h>
+#include <stddef.h>
+#include <device.h>
 #include <string.h>
 
-/*------------------------------------------------------------------------
- *  getdev  -  Convert a device name to a device ID
- *------------------------------------------------------------------------
+/**
+ * @ingroup devcalls
+ *
+ * Translates a device name into a device number.
+ *
+ * @param dev
+ *      Name of the device.
+ *
+ * @return
+ *      The number of the device, or ::SYSERR if the device was not found.
  */
-did32	getdev(
-	  char		*devname	/* Name of the device		*/
-	)
+syscall getdev(const char *dev)
 {
-	intmask		mask;		/* Saved interrupt mask		*/
-	did32		id;		/* Value to return to caller	*/
+    int devnum;
 
-	mask = disable();
-	for (id = 0; id < NDEVS; id++) {
-		if (strncmp(devname, devtab[id].dvname, DEVNAMLEN)) {
-			restore(mask);
-			return id;
-		}
-	}
-	restore(mask);
-	return (did32) SYSERR;
+    for (devnum = 0; devnum < NDEVS; devnum++)
+    {
+        if (0 == strncmp(dev, devtab[devnum].name, DEVMAXNAME))
+        {
+            return devnum;
+        }
+    }
+
+    return SYSERR;
 }

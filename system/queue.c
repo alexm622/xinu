@@ -1,52 +1,67 @@
-/* queue.c - enqueue, dequeue */
-
-#include <xinu.h>
-
-struct qentry	queuetab[NQENT];	/* Table of process queues	*/
-
-/*------------------------------------------------------------------------
- *  enqueue  -  Insert a process at the tail of a queue
- *------------------------------------------------------------------------
+/**
+ * @file queue.c
+ *
  */
-pid32	enqueue(
-	  pid32		pid,		/* ID of process to insert	*/
-	  qid16		q		/* ID of queue to use		*/
-	)
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+
+#include <stddef.h>
+#include <thread.h>
+#include <queue.h>
+
+struct queent quetab[NQENT];    /**< global thread queue table       */
+
+/**
+ * @ingroup threads
+ *
+ * Insert a thread at the tail of a queue
+ * @param  tid  thread ID to enqueue
+ * @param  q    target queue
+ * @return thread id of enqueued thread
+ */
+tid_typ enqueue(tid_typ tid, qid_typ q)
 {
-	qid16	tail, prev;		/* Tail & previous node indexes	*/
+    int prev, tail;
 
-	if (isbadqid(q) || isbadpid(pid)) {
-		return SYSERR;
-	}
+    if (isbadqid(q) || isbadtid(tid))
+    {
+        return SYSERR;
+    }
 
-	tail = queuetail(q);
-	prev = queuetab[tail].qprev;
+    tail = quetail(q);
+    prev = quetab[tail].prev;
 
-	queuetab[pid].qnext  = tail;	/* Insert just before tail node	*/
-	queuetab[pid].qprev  = prev;
-	queuetab[prev].qnext = pid;
-	queuetab[tail].qprev = pid;
-	return pid;
+    quetab[tid].next = tail;
+    quetab[tid].prev = prev;
+    quetab[prev].next = tid;
+    quetab[tail].prev = tid;
+    return tid;
 }
 
-/*------------------------------------------------------------------------
- *  dequeue  -  Remove and return the first process on a list
- *------------------------------------------------------------------------
+/**
+ * @ingroup threads
+ *
+ * Remove and return the first thread on a list
+ * @param  q  target queue
+ * @return thread id of removed thread, or EMPTY
  */
-pid32	dequeue(
-	  qid16		q		/* ID of queue to use		*/
-	)
+tid_typ dequeue(qid_typ q)
 {
-	pid32	pid;			/* ID of process removed	*/
+    int tid;
 
-	if (isbadqid(q)) {
-		return SYSERR;
-	} else if (isempty(q)) {
-		return EMPTY;
-	}
+    if (isbadqid(q))
+    {
+        return SYSERR;
+    }
+    if (isempty(q))
+    {
+        return EMPTY;
+    }
 
-	pid = getfirst(q);
-	queuetab[pid].qprev = EMPTY;
-	queuetab[pid].qnext = EMPTY;
-	return pid;
+    tid = getfirst(q);
+    if (!isbadtid(tid))
+    {
+        quetab[tid].prev = EMPTY;
+        quetab[tid].next = EMPTY;
+    }
+    return tid;
 }

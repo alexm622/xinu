@@ -1,59 +1,70 @@
-/* kill.c - kill */
-
-#include <xinu.h>
-
-/*------------------------------------------------------------------------
- *  kill  -  Kill a process and remove it from the system
- *------------------------------------------------------------------------
+/**
+ * @file kill.c
+ *
  */
-syscall	kill(
-	  pid32		pid		/* ID of process to kill	*/
-	)
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+
+#include <thread.h>
+#include <queue.h>
+#include <memory.h>
+#include <safemem.h>
+
+extern void xdone(void);
+
+/**
+ * @ingroup threads
+ *
+ * Kill a thread and remove it from the system
+ * @param tid target thread
+ * @return OK on success, SYSERR otherwise
+ */
+syscall kill(tid_typ tid)
 {
-	intmask	mask;			/* Saved interrupt mask		*/
-	struct	procent *prptr;		/* Ptr to process's table entry	*/
-	int32	i;			/* Index into descriptors	*/
+    register struct thrent *thrptr;     /* thread control block */
+    irqmask im;
 
-	mask = disable();
-	if (isbadpid(pid) || (pid == NULLPROC)
-	    || ((prptr = &proctab[pid])->prstate) == PR_FREE) {
-		restore(mask);
-		return SYSERR;
-	}
+    im = disable();
+    if (isbadtid(tid) || (NULLTHREAD == tid))
+    {
+        restore(im);
+        return SYSERR;
+    }
+    thrptr = &thrtab[tid];
 
-	if (--prcount <= 1) {		/* Last user process completes	*/
-		xdone();
-	}
+    if (--thrcount <= 1)
+    {
+        xdone();
+    }
 
-	send(prptr->prparent, pid);
-	for (i=0; i<3; i++) {
-		close(prptr->prdesc[i]);
-	}
-	freestk(prptr->prstkbase, prptr->prstklen);
+#ifdef UHEAP_SIZE
+    /* reclaim used memory regions */
+    memRegionReclaim(tid);
+#endif                          /* UHEAP_SIZE */
 
-	switch (prptr->prstate) {
-	case PR_CURR:
-		prptr->prstate = PR_FREE;	/* Suicide */
-		resched();
+    send(thrptr->parent, tid);
 
-	case PR_SLEEP:
-	case PR_RECTIM:
-		unsleep(pid);
-		prptr->prstate = PR_FREE;
-		break;
+    stkfree(thrptr->stkbase, thrptr->stklen);
 
-	case PR_WAIT:
-		semtab[prptr->prsem].scount++;
-		/* Fall through */
+    switch (thrptr->state)
+    {
+    case THRSLEEP:
+        unsleep(tid);
+        thrptr->state = THRFREE;
+        break;
+    case THRCURR:
+        thrptr->state = THRFREE;        /* suicide */
+        resched();
 
-	case PR_READY:
-		getitem(pid);		/* Remove from queue */
-		/* Fall through */
+    case THRWAIT:
+        semtab[thrptr->sem].count++;
 
-	default:
-		prptr->prstate = PR_FREE;
-	}
+    case THRREADY:
+        getitem(tid);           /* removes from queue */
 
-	restore(mask);
-	return OK;
+    default:
+        thrptr->state = THRFREE;
+    }
+
+    restore(im);
+    return OK;
 }

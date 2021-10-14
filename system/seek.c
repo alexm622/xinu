@@ -1,27 +1,28 @@
-/* seek.c - seek */
-
-#include <xinu.h>
-
-/*------------------------------------------------------------------------
- *  seek  -  Position a random access device
- *------------------------------------------------------------------------
+/**
+ * @file seek.c
+ *
  */
-syscall	seek(
-	  did32		descrp,		/* Descriptor for device	*/
-	  uint32	pos		/* Position			*/
-	)
-{
-	intmask		mask;		/* Saved interrupt mask		*/
-	struct dentry	*devptr;	/* Entry in device switch table	*/
-	int32		retval;		/* Value to return to caller	*/
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
 
-	mask = disable();
-	if (isbaddev(descrp)) {
-		restore(mask);
-		return SYSERR;
-	}
-	devptr = (struct dentry *) &devtab[descrp];
-	retval = (*devptr->dvseek) (devptr, pos);
-	restore(mask);
-	return retval;
+#include <stddef.h>
+#include <device.h>
+
+/**
+ * XXX:  This function apparently isn't used anywhere currently.
+ *
+ * position a device (very common special case of control)
+ * @param descrp definition of device on which to seek
+ * @param pos requested position to seek
+ * @return function to seek on device on success, SYSERR on failure
+ */
+devcall seek(int descrp, uint pos)
+{
+    device *devptr;
+
+    if (isbaddev(descrp))
+    {
+        return SYSERR;
+    }
+    devptr = (device *)&devtab[descrp];
+    return ((*devptr->seek) (devptr, pos));
 }

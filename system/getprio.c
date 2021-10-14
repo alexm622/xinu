@@ -1,24 +1,31 @@
-/* getprio.c - getprio */
-
-#include <xinu.h>
-
-/*------------------------------------------------------------------------
- *  getprio  -  Return the scheduling priority of a process
- *------------------------------------------------------------------------
+/**
+ * @file getprio.c
+ *
  */
-syscall	getprio(
-	  pid32		pid		/* Process ID			*/
-	)
-{
-	intmask	mask;			/* Saved interrupt mask		*/
-	uint32	prio;			/* Priority to return		*/
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
 
-	mask = disable();
-	if (isbadpid(pid)) {
-		restore(mask);
-		return SYSERR;
-	}
-	prio = proctab[pid].prprio;
-	restore(mask);
-	return prio;
+#include <thread.h>
+
+/**
+ * @ingroup threads
+ *
+ * Return the scheduling priority of a thread
+ * @param tid thread ID
+ * @return priority of thread on success, SYSERR on failure
+ */
+syscall getprio(tid_typ tid)
+{
+    int prio;
+    irqmask im;
+
+    im = disable();
+    if (isbadtid(tid))
+    {
+        restore(im);
+        return SYSERR;
+    }
+
+    prio = thrtab[tid].prio;
+    restore(im);
+    return prio;
 }

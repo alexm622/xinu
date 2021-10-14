@@ -1,29 +1,40 @@
-/* control.c - control */
-
-#include <xinu.h>
-
-/*------------------------------------------------------------------------
- *  control  -  Control a device or a driver (e.g., set the driver mode)
- *------------------------------------------------------------------------
+/**
+ * @file control.c
+ *
  */
-syscall	control(
-	  did32		descrp,		/* Descriptor for device	*/
-	  int32		func,		/* Specific control function	*/
-	  int32		arg1,		/* Specific argument for func	*/
-	  int32		arg2		/* Specific argument for func	*/
-	)
-{
-	intmask		mask;		/* Saved interrupt mask		*/
-	struct dentry	*devptr;	/* Entry in device switch table	*/
-	int32		retval;		/* Value to return to caller	*/
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
 
-	mask = disable();
-	if (isbaddev(descrp)) {
-		restore(mask);
-		return SYSERR;
-	}
-	devptr = (struct dentry *) &devtab[descrp];
-	retval = (*devptr->dvcntl) (devptr, func, arg1, arg2);
-	restore(mask);
-	return retval;
+#include <stddef.h>
+#include <device.h>
+
+/**
+ * @ingroup devcalls
+ *
+ * Execute an I/O Control request on a device.
+ *
+ * @param descrp
+ *      Index of the device.
+ * @param func
+ *      Device-specific specific control "function".
+ * @param arg1
+ *      Additional argument for the device-specific control function.
+ * @param arg2
+ *      Additional argument for the device-specific control function.
+ *
+ * @return
+ *      Returns ::SYSERR if the device index does not correspond to an
+ *      appropriate device or if the control function is not recognized;
+ *      otherwise returns a request-specific value that is typically ::SYSERR on
+ *      failure, but may be either ::OK or request-specific data on success.
+ */
+devcall control(int descrp, int func, long arg1, long arg2)
+{
+    device *devptr;
+
+    if (isbaddev(descrp))
+    {
+        return SYSERR;
+    }
+    devptr = (device *)&devtab[descrp];
+    return ((*devptr->control) (devptr, func, arg1, arg2));
 }

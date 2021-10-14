@@ -1,89 +1,105 @@
-/* uart.h - definintions for the NS16550 uart serial hardware */
-
-#define UART_BAUD	115200	/* Default console baud rate.		*/
-#define	UART_OUT_IDLE	0x0016	/* determine if transmit idle		*/
-#define	UART_FIFO_SIZE	16	/* chars in UART onboard output FIFO	*/
-				/* (16 for later UART chips)		*/
-#define INTEL_QUARK_UART_PCI_DID	0x0936	/* UART PCI Device ID	*/
-#define INTEL_QUARK_UART_PCI_VID	0x8086	/* UART PCI Vendor ID	*/
-/*
- * Control and Status Register (CSR) definintions for the 16550 UART.
- * The code maps the structure structure directly onto the base address
- * CSR address for the device.
+/**
+ * @file uart.h
  */
-struct	uart_csreg
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
+
+#ifndef _UART_H_
+#define _UART_H_
+
+#include <device.h>
+#include <semaphore.h>
+#include <stddef.h>
+
+/* UART Buffer lengths */
+#ifndef UART_IBLEN
+#define UART_IBLEN      1024
+#endif
+#ifndef UART_OBLEN
+#define UART_OBLEN      1024
+#endif
+
+#define UART_BAUD       115200  /**< Default console baud rate.         */
+
+/**
+ * UART control block
+ */
+struct uart
 {
-	volatile uint32	buffer;	/* receive buffer (when read)		*/
-				/*   OR transmit hold (when written)	*/
-	volatile uint32	ier;	/* interrupt enable			*/
-	volatile uint32	iir;	/* interrupt identification (when read)	*/
-				/*   OR FIFO control (when written)	*/
-	volatile uint32	lcr;	/* line control register		*/
-	volatile uint32	mcr;	/* modem control register		*/
-	volatile uint32	lsr;	/* line status register			*/
-	volatile uint32	msr;	/* modem status register		*/
-	volatile uint32	scr;	/* scratch register			*/
+    /* Pointers to associated structures */
+    void *csr;                  /**< Control & status registers         */
+    device *dev;                /**< Dev structure                      */
+
+    /* Statistical Counts */
+    uint cout;                  /**< Characters output                  */
+    uint cin;                   /**< Characters input                   */
+    uint lserr;                 /**< Receiver error count               */
+    uint ovrrn;                 /**< Characters overrun                 */
+    uint iirq;                  /**< Input IRQ count                    */
+    uint oirq;                  /**< Output IRQ count                   */
+
+    /* UART input fields */
+    uchar iflags;               /**< Input flags                        */
+    semaphore isema;            /**< Count of input bytes ready         */
+    ushort istart;              /**< Index of first byte                */
+    ushort icount;              /**< Bytes in buffer                    */
+    uchar in[UART_IBLEN];       /**< Input buffer                       */
+
+    /* UART output fields */
+    uchar oflags;               /**< Output flags                       */
+    semaphore osema;            /**< Count of buffer space free         */
+    ushort ostart;              /**< Index of first byte                */
+    ushort ocount;              /**< Bytes in buffer                    */
+    uchar out[UART_OBLEN];      /**< Output buffer                      */
+    volatile bool oidle;        /**< UART transmitter idle              */
 };
 
-/* Alternative names for control and status registers */
+extern struct uart uarttab[];
 
-#define	rbr	buffer		/* receive buffer (when read)		*/
-#define	thr	buffer		/* transmit hold (when written)		*/
-#define	fcr	iir		/* FIFO control (when written)		*/
-#define	dll	buffer		/* divisor latch (low byte)		*/
-#define	dlm	ier		/* divisor latch (high byte)		*/
+/* UART input flags */
+#define UART_IFLAG_NOBLOCK    0x0001 /**< do non-blocking input         */
+#define UART_IFLAG_ECHO       0x0002 /**< echo input                    */
 
-/* Definintion of individual bits in control and status registers	*/
+/* UART output flags */
+#define UART_OFLAG_NOBLOCK    0x0001 /**< do non-blocking output        */
 
-/* Port offsets from the base */
+/* uartControl() functions  */
+#define UART_CTRL_SET_IFLAG   0x0010 /**< set input flags               */
+#define UART_CTRL_CLR_IFLAG   0x0011 /**< clear input flags             */
+#define UART_CTRL_GET_IFLAG   0x0012 /**< get input flags               */
+#define UART_CTRL_SET_OFLAG   0x0013 /**< set output flags              */
+#define UART_CTRL_CLR_OFLAG   0x0014 /**< clear output flags            */
+#define UART_CTRL_GET_OFLAG   0x0015 /**< get output flags              */
+#define UART_CTRL_OUTPUT_IDLE 0x0016 /**< determine if transmit idle    */
 
-#define	UART_DLL	0x00	/* value for low byte of divisor latch	*/
-				/*	DLAB=0				*/
-#define UART_DLM	0x01	/* value for high byte of divisor latch	*/
-				/*	DLAB=1				*/
+/* Driver functions */
+devcall uartInit(device *);
+devcall uartRead(device *, void *, uint);
+devcall uartWrite(device *, const void *, uint);
+devcall uartGetc(device *);
+devcall uartPutc(device *, char);
+devcall uartControl(device *, int, long, long);
+interrupt uartInterrupt(void);
+void uartStat(ushort);
 
-/* Line control bits */
+/**
+ * @ingroup uarthardware
+ *
+ * Initialize the UART hardware.
+ */
+devcall uartHwInit(device *);
 
-#define	UART_LCR_DLAB	0x80	/* Divisor latch access bit		*/
-#define	UART_LCR_8N1	0x03	/* 8 bits, no parity, 1 stop		*/
+/**
+ * @ingroup uarthardware
+ *
+ * Immediately put a character to the UART.
+ */
+void uartHwPutc(void *, uchar);
 
-/* Interrupt enable bits */
+/**
+ * @ingroup uarthardware
+ *
+ * Print hardware-specific statistics about the UART.
+ */
+void uartHwStat(void *);
 
-#define UART_IER_ERBFI	0x01	/* Received data interrupt mask		*/
-#define UART_IER_ETBEI	0x02	/* Transmitter buffer empty interrupt	*/
-#define UART_IER_ELSI	0x04	/* Recv line status interrupt mask	*/
-#define UART_IER_EMSI	0x08	/* Modem status interrupt mask		*/
-
-/* Interrupt identification masks */
-
-#define UART_IIR_IRQ	0x01	/* Interrupt pending bit		*/
-#define UART_IIR_IDMASK 0x0E	/* 3-bit field for interrupt ID		*/
-#define UART_IIR_MSC	0x00	/* Modem status change			*/
-#define UART_IIR_THRE	0x02	/* Transmitter holding register empty	*/
-#define UART_IIR_RDA	0x04	/* Receiver data available		*/
-#define UART_IIR_RLSI	0x06	/* Receiver line status interrupt	*/
-#define UART_IIR_RTO	0x0C	/* Receiver timed out			*/
-
-/* FIFO control bits */
-
-#define UART_FCR_EFIFO	0x01	/* Enable in and out hardware FIFOs	*/
-#define UART_FCR_RRESET 0x02	/* Reset receiver FIFO			*/
-#define UART_FCR_TRESET 0x04	/* Reset transmit FIFO			*/
-#define UART_FCR_TRIG0	0x00	/* RCVR FIFO trigger level one char	*/
-#define UART_FCR_TRIG1	0x40	/* RCVR FIFO trigger level 1/4		*/
-#define UART_FCR_TRIG2	0x80	/* RCVR FIFO trigger level 2/4		*/
-#define UART_FCR_TRIG3	0xC0	/* RCVR FIFO trigger level 3/4		*/
-
-/* Modem control bits */
-
-#define UART_MCR_OUT2	0x08	/* User-defined OUT2			*/
-#define UART_MCR_RTS    0x02    /* RTS complement 			*/
-#define UART_MCR_DTR    0x01    /* DTR complement 			*/
-#define UART_MCR_LOOP	0x10	/* Enable loopback test mode		*/
-
-/* Line status bits */
-
-#define UART_LSR_DR	0x01	/* Data ready				*/
-#define	UART_LSR_BI	0x10	/* Break interrupt indicator		*/
-#define UART_LSR_THRE	0x20	/* Transmit-hold-register empty		*/
-#define UART_LSR_TEMT	0x40	/* Transmitter empty			*/
+#endif                          /* _UART_H_ */

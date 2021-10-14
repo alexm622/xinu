@@ -1,113 +1,284 @@
-/* xsh_memstat.c - xsh_memstat */
+/**
+ * @file     xsh_memstat.c
+ *
+ */
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
 
-#include <xinu.h>
+#include <stddef.h>
+#include <platform.h>
+#include <mips.h>
+#include <memory.h>
+#include <safemem.h>
 #include <stdio.h>
 #include <string.h>
+#include <thread.h>
+#include <stdlib.h>
 
-static	void	printMemUse(void);
-static	void	printFreeList(void);
+#define PRINT_DEFAULT 0x01
+#define PRINT_KERNEL  0x02
+#define PRINT_REGION  0x04
+#define PRINT_THREAD  0x08
 
-/*------------------------------------------------------------------------
- * xsh_memstat - Print statistics about memory use and dump the free list
- *------------------------------------------------------------------------
+extern char *maxaddr;
+extern void _start(void);
+
+static void printMemUsage(void);
+static void printRegAllocList(void);
+static void printRegFreeList(void);
+static void printFreeList(struct memblock *, char *);
+
+static void usage(char *command)
+{
+    printf("Usage: %s [-r] [-k] [-q] [-t <TID>]\n\n", command);
+    printf("Description:\n");
+    printf("\tDisplays the current memory usage and prints the\n");
+    printf("\tfree list.\n");
+    printf("Options:\n");
+    printf("\t-r\t\tprint region allocated and free lists\n");
+    printf("\t-k\t\tprint kernel free list\n");
+    printf("\t-q\t\tsuppress current system memory usage screen\n");
+    printf("\t-t <TID>\tprint user free list of thread id tid\n");
+    printf("\t--help\t\tdisplay this help and exit\n");
+}
+
+/**
+ * @ingroup shell
+ *
+ * Shell command (gpiostat) provides memory use and free list information.
+ * @param nargs number of arguments in args array
+ * @param args  array of arguments
+ * @return non-zero value on error
  */
 shellcmd xsh_memstat(int nargs, char *args[])
 {
+    int i;
+    tid_typ tid;                /* thread to dump memlist of      */
+    char print;                 /* print region free/alloc lists  */
 
-	/* For argument '--help', emit help about the 'memstat' command	*/
+    print = PRINT_DEFAULT;
 
-	if (nargs == 2 && strncmp(args[1], "--help", 7) == 0) {
-		printf("use: %s \n\n", args[0]);
-		printf("Description:\n");
-		printf("\tDisplays the current memory use and prints the\n");
-		printf("\tfree list.\n");
-		printf("Options:\n");
-		printf("\t--help\t\tdisplay this help and exit\n");
-		return 0;
-	}
+    /* Output help, if '--help' argument was supplied */
+    if (nargs == 2 && strcmp(args[1], "--help") == 0)
+    {
+        usage(args[0]);
+        return 0;
+    }
 
-	/* Check for valid number of arguments */
+    tid = BADTID;
+    for (i = 1; i < nargs; i++)
+    {
+        if (0 == strcmp(args[i], "-t"))
+        {
+            if (i + 1 < nargs)
+            {
+                /* Get thread id to display freelist of */
+                print |= PRINT_THREAD;
+                tid = atoi(args[i + 1]);
+            }
+            else
+            {
+                usage(args[0]);
+                return 1;
+            }
+        }
+        else if (0 == strcmp(args[i], "-r"))
+        {
+            print |= PRINT_REGION;
+        }
+        else if (0 == strcmp(args[i], "-k"))
+        {
+            print |= PRINT_KERNEL;
+        }
+        else if (0 == strcmp(args[i], "-q"))
+        {
+            print &= ~(PRINT_DEFAULT);
+        }
+    }
 
-	if (nargs > 1) {
-		fprintf(stderr, "%s: too many arguments\n", args[0]);
-		fprintf(stderr, "Try '%s --help' for more information\n",
-				args[0]);
-		return 1;
-	}
+    if (print & PRINT_DEFAULT)
+    {
+        printMemUsage();
+    }
 
-	printMemUse();
-	printFreeList();
+    if (print & PRINT_REGION)
+    {
+        printRegAllocList();
+        printRegFreeList();
+    }
 
-	return 0;
+    if (print & PRINT_KERNEL)
+    {
+        printFreeList(&memlist, "kernel");
+    }
+
+    if (print & PRINT_THREAD)
+    {
+        if (isbadtid(tid))
+        {
+            fprintf(stderr, "Invalid thread id: %d\n", tid);
+        }
+        else
+        {
+            printFreeList(&(thrtab[tid].memlist), thrtab[tid].name);
+        }
+    }
+
+    return 0;
 }
 
-
-/*------------------------------------------------------------------------
- * printFreeList - Walk the list of free memory blocks and print the
- *			location and size of each
- *------------------------------------------------------------------------
- */
-static void printFreeList(void)
+static void printMemUsage(void)
 {
-	struct memblk *block;
+    int i;
+    uint phys = 0;              /* total physical memory          */
+    uint resrv = 0;             /* total reserved system memory   */
+    uint code = 0;              /* total Xinu code memory         */
+    uint stack = 0;             /* total stack memory             */
+    uint kheap = 0;             /* total kernel heap memory       */
+    uint kused = 0;             /* total used kernel heap memory  */
+    uint kfree = 0;             /* total free memory              */
+    struct memblock *block;     /* memory block pointer           */
+#ifdef UHEAP_SIZE
+    uint uheap = 0;             /* total user heap memory         */
+    uint uused = 0;             /* total used user heap memory    */
+    struct memregion *regptr;   /* point to memory region */
+#endif                          /* UHEAP_SIZE */
 
-	/* Output a heading for the free list */
 
-	printf("Free List:\n");
-	printf("Block address  Length (dec)  Length (hex)\n");
-	printf("-------------  ------------  ------------\n");
-	
-	for (block = memlist.mnext; block != NULL; block = block->mnext) {
-		printf("  0x%08x    %9d     0x%08x\n", block,
-			block->mlength, block->mlength);
-	}
-	printf("\n");
+#ifdef _XINU_ARCH_MIPS_
+    /* Calculate amount of physical memory */
+    phys = (ulong)platform.maxaddr - (ulong)KSEG0_BASE;
+    /* Calculate amount of reserved system memory */
+    resrv = (ulong)_start - (ulong)KSEG0_BASE;
+#else
+    phys = (ulong)platform.maxaddr - (ulong)platform.minaddr;
+    resrv = (ulong)_start - (ulong)platform.minaddr;
+#endif
+    
+    /* Calculate amount of text memory */
+    code = (ulong)&_end - (ulong)_start;
+
+    /* Caculate amount of stack memory */
+    for (i = 0; i < NTHREAD; i++)
+    {
+        if (thrtab[i].state != THRFREE)
+        {
+            stack += (ulong)thrtab[i].stklen;
+        }
+    }
+
+    /* Calculate amount of free kernel memory */
+    for (block = memlist.next; block != NULL; block = block->next)
+    {
+        kfree += block->length;
+    }
+
+    /* Caculate amount of kernel heap memory */
+    kheap = phys - resrv - code - stack;
+    kused = kheap - kfree;
+
+    /* Calculate amount of user heap memory */
+#ifdef UHEAP_SIZE
+    /* determine used user heap amount */
+    for (regptr = regalloclist; (int)regptr != SYSERR;
+         regptr = regptr->next)
+    {
+        uused += regptr->length;
+    }
+
+    /* determine total user heap size */
+    uheap = uused;
+    for (regptr = regfreelist; (int)regptr != SYSERR;
+         regptr = regptr->next)
+    {
+        uheap += regptr->length;
+    }
+
+    /* the kernel donates used memory, so update those vars */
+    kheap -= uheap;
+    kused -= uheap;
+#endif                          /* UHEAP_SIZE */
+
+    /* Ouput current memory usage */
+    printf("Current System Memory Usage:\n");
+    printf("----------------------------\n");
+    printf("%10d bytes system area\n", resrv);
+    printf("%10d bytes Xinu code\n", code);
+    printf("%10d bytes stack space\n", stack);
+    printf("%10d bytes kernel heap space (%d used)\n", kheap, kused);
+#ifdef UHEAP_SIZE
+    printf("%10d bytes user heap space (%d used)\n", uheap, uused);
+#endif                          /* UHEAP_SIZE */
+    printf("----------------------------\n");
+    printf("%10d bytes physical memory\n\n", phys);
 }
 
-extern void start(void);
-extern void *_end;
-
-/*------------------------------------------------------------------------
- * printMemUse - Print statistics about memory use
- *------------------------------------------------------------------------
+/**
+ * Dump the current contents of the allocated region list.
  */
-static void printMemUse(void)
+static void printRegAllocList(void)
 {
-	int i;				/* Index into process table	*/
-	uint32 code = 0;		/* Total Xinu code memory	*/
-	uint32 stack = 0;		/* Total used stack memory	*/
-	uint32 kheap = 0;		/* Free kernel heap memory	*/
-	uint32 kfree = 0;		/* Total free memory		*/
-	struct memblk *block;	 	/* Ptr to memory block		*/
+#ifdef UHEAP_SIZE
+    uint index;
+    struct memregion *regptr;
 
-	/* Calculate amount of text memory */
+    /* Output free list */
+    printf("Region Allocated List:\n");
+    printf("Index  Start       Length    TID\n");
+    printf("-----  ----------  --------  ---\n");
 
-	code = (uint32)&_end - (uint32)start;
+    for (regptr = regalloclist; (int)regptr != SYSERR;
+         regptr = regptr->next)
+    {
+        index = ((uint)regptr - (uint)regtab) / sizeof(struct memregion);
+        printf("%5d  0x%08x  %8d  %3d\n", index, regptr->start,
+               regptr->length, regptr->thread_id);
+    }
+    printf("\n");
+#else
+    fprintf(stderr, "No user heap available.\n\n");
+#endif                          /* UHEAP_SIZE */
+}
 
-	/* Calculate amount of allocated stack memory */
-	/*  Skip the NULL process since it has a private stack */
+/**
+ * Dump the current contents of the free region list.
+ */
+static void printRegFreeList(void)
+{
+#ifdef UHEAP_SIZE
+    uint index;
+    struct memregion *regptr;
 
-	for (i = 1; i < NPROC; i++) {
-		if (proctab[i].prstate != PR_FREE) {
-			stack += (uint32)proctab[i].prstklen;
-		}
-	}
+    /* Output free list */
+    printf("Region Free List:\n");
+    printf("Index  Start       Length  \n");
+    printf("-----  ----------  --------\n");
 
-	/* Calculate the amount of memory on the free list */
+    for (regptr = regfreelist; (int)regptr != SYSERR;
+         regptr = regptr->next)
+    {
+        index = ((uint)regptr - (uint)regtab) / sizeof(struct memregion);
+        printf("%5d  0x%08x  %8d\n", index, regptr->start,
+               regptr->length);
+    }
+    printf("\n");
+#endif                          /* UHEAP_SIZE */
+}
 
-	for (block = memlist.mnext; block != NULL; block = block->mnext) {
-		kfree += block->mlength;
-	}
+/**
+ * Dump the current free list of a specific thread.
+ * @param tid Id of thread to dump free list.
+ */
+static void printFreeList(struct memblock *base, char *ident)
+{
+    struct memblock *block;
 
-	/* Calculate the amount of free kernel heap memory */
-
-	kheap = kfree - stack;
-
-	/* Output statistics on current memory use */
-
-	printf("Current system memory statistics:\n");
-	printf("---------------------------------\n");
-	printf("%10d bytes (0x%08x) of Xinu code\n", code, code);
-	printf("%10d bytes (0x%08x) of allocated stack space\n", stack, stack);
-	printf("%10d bytes (0x%08x) of available kernel heap space\n\n", kheap, kheap);
+    /* Output free list */
+    printf("Free List (%s):\n", ident);
+    printf("BLOCK START  LENGTH  \n");
+    printf("-----------  --------\n");
+    for (block = base->next; block != NULL; block = block->next)
+    {
+        printf("0x%08lX   %8u\n", (ulong)block, block->length);
+    }
+    printf("\n");
 }

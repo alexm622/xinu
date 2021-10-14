@@ -1,50 +1,69 @@
-/* semcreate.c - semcreate, newsem */
-
-#include <xinu.h>
-
-local	sid32	newsem(void);
-
-/*------------------------------------------------------------------------
- *  semcreate  -  Create a new semaphore and return the ID to the caller
- *------------------------------------------------------------------------
+/**
+ * @file semcreate.c
  */
-sid32	semcreate(
-	  int32		count		/* Initial semaphore count	*/
-	)
+/* Embedded Xinu, Copyright (C) 2009, 2013.  All rights reserved. */
+
+#include <semaphore.h>
+#include <interrupt.h>
+
+static semaphore semalloc(void);
+
+/**
+ * @ingroup semaphores
+ *
+ * Creates a semaphore that initially has the specified count.
+ *
+ * @param count
+ *      Initial count of the semaphore (often the number of some resource that
+ *      is available).  Must be non-negative.
+ *
+ * @return
+ *      On success, returns the new semaphore; otherwise returns ::SYSERR.  The
+ *      new semaphore must be freed with semfree() when no longer needed.  This
+ *      function can only fail if the system is out of semaphores or if @p count
+ *      was negative.
+ */
+semaphore semcreate(int count)
 {
-	intmask	mask;			/* Saved interrupt mask		*/
-	sid32	sem;			/* Semaphore ID to return	*/
+    semaphore sem;
+    irqmask im;
 
-	mask = disable();
+    if (count < 0)          /* Don't allow starting with negative count.  */
+    {
+        return SYSERR;
+    }
 
-	if (count < 0 || ((sem=newsem())==SYSERR)) {
-		restore(mask);
-		return SYSERR;
-	}
-	semtab[sem].scount = count;	/* Initialize table entry	*/
-
-	restore(mask);
-	return sem;
+    im = disable();         /* Disable interrupts.  */
+    sem = semalloc();       /* Allocate semaphore.  */
+    if (SYSERR != sem)      /* If semaphore was allocated, set count.  */
+    {
+        semtab[sem].count = count;
+    }
+    /* Restore interrupts and return either the semaphore or SYSERR.  */
+    restore(im);
+    return sem;
 }
 
-/*------------------------------------------------------------------------
- *  newsem  -  Allocate an unused semaphore and return its index
- *------------------------------------------------------------------------
+/**
+ * Allocate an unused semaphore and return its ID.
+ * Scan the global semaphore table for a free entry, mark the entry
+ * used, and return the new semaphore
+ * @return available semaphore ID on success, SYSERR on failure
  */
-local	sid32	newsem(void)
+static semaphore semalloc(void)
 {
-	static	sid32	nextsem = 0;	/* Next semaphore index to try	*/
-	sid32	sem;			/* Semaphore ID to return	*/
-	int32	i;			/* Iterate through # entries	*/
+    int i;
+    static int nextsem = 0;
 
-	for (i=0 ; i<NSEM ; i++) {
-		sem = nextsem++;
-		if (nextsem >= NSEM)
-			nextsem = 0;
-		if (semtab[sem].sstate == S_FREE) {
-			semtab[sem].sstate = S_USED;
-			return sem;
-		}
-	}
-	return SYSERR;
+    /* check all NSEM slots, starting at 1 past the last slot searched.  */
+    for (i = 0; i < NSEM; i++)
+    {
+        nextsem = (nextsem + 1) % NSEM;
+        if (SFREE == semtab[nextsem].state)
+        {
+            semtab[nextsem].state = SUSED;
+            return nextsem;
+        }
+    }
+    return SYSERR;
 }

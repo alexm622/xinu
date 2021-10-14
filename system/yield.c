@@ -1,17 +1,23 @@
-/* yield.c - yield */
-
-#include <xinu.h>
-
-/*------------------------------------------------------------------------
- *  yield  -  Voluntarily relinquish the CPU (end a timeslice)
- *------------------------------------------------------------------------
+/**
+ * @file yield.c
+ *
  */
-syscall	yield(void)
-{
-	intmask	mask;			/* Saved interrupt mask		*/
+/* Embedded Xinu, Copyright (C) 2009.  All rights reserved. */
 
-	mask = disable();
-	resched();
-	restore(mask);
-	return OK;
+#include <thread.h>
+
+/**
+ * @ingroup threads
+ *
+ * Yield processor.
+ * @return OK when the thread is context switched back
+ */
+syscall yield(void)
+{
+    irqmask im;
+
+    im = disable();
+    resched();
+    restore(im);
+    return OK;
 }
