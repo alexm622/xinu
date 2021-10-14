@@ -13,7 +13,7 @@ CFILES  := $(filter-out $($(shell echo $(LIBNAME) | tr a-z A-Z)_OVERRIDE_CFILES)
 SFILES  := $(filter-out $($(shell echo $(LIBNAME) | tr a-z A-Z)_OVERRIDE_SFILES), $(SFILES))
 
 # Update the include flag
-CFLAGS  := $(CFLAGS:-I%=$(INCLUDE))
+CFLAGS  := $(CFLAGS:-I%=$(INCLUDE)) -fno-stack-protector
 
 # C object files
 COBJ    := $(CFILES:%.c=%.o)
